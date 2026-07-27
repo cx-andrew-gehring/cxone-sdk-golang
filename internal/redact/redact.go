@@ -25,7 +25,12 @@ var formSecretRe = regexp.MustCompile(`(?i)(client_secret|refresh_token|api_key)
 
 // jsonSecretRe matches JSON-encoded secret fields.
 // e.g. "client_secret":"abc"  →  "client_secret":"REDACTED"
-var jsonSecretRe = regexp.MustCompile(`(?i)"(client_secret|refresh_token|api_key|access_token|password)"\s*:\s*"[^"]*"`)
+//
+// The bare "token" alternative covers the repos-manager project-conversion
+// request body, which carries the caller's SCM access token under that name.
+// It cannot collide with refresh_token / access_token: the pattern anchors on
+// the opening quote, so those only match their own alternatives.
+var jsonSecretRe = regexp.MustCompile(`(?i)"(client_secret|refresh_token|api_key|access_token|password|token)"\s*:\s*"[^"]*"`)
 
 // String strips bearer tokens and known secret fields from s.
 //

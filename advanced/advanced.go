@@ -902,6 +902,25 @@ func (s *SCM) GetRepository(ctx context.Context, repositoryID uint64) (*models.S
 	return scm.GetRepository(ctx, s.h.executor, s.h.rootURL, repositoryID)
 }
 
+// DisconnectProject reverts a code repository project to a manual project,
+// keeping its scan history.
+func (s *SCM) DisconnectProject(ctx context.Context, projectID string) error {
+	return scm.DisconnectProject(ctx, s.h.executor, s.h.rootURL, projectID)
+}
+
+// ConvertProjects starts an asynchronous conversion of manual projects into
+// code repository projects. Poll the returned process id with
+// [SCM.GetConversionStatus].
+func (s *SCM) ConvertProjects(ctx context.Context, req *models.SCMConversionRequest) (*models.SCMConversionResponse, error) {
+	return scm.ConvertProjects(ctx, s.h.executor, s.h.rootURL, req)
+}
+
+// GetConversionStatus returns the state of a conversion process. Process data
+// is retained for 7 days.
+func (s *SCM) GetConversionStatus(ctx context.Context, processID string) (*models.SCMConversionStatus, error) {
+	return scm.GetConversionStatus(ctx, s.h.executor, s.h.rootURL, processID)
+}
+
 // ----- PresetManager ---------------------------------------------------------
 
 // PresetManager wraps the preset-manager endpoints for SAST/IAC preset CRUD

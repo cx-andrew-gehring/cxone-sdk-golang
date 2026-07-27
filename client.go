@@ -28,6 +28,7 @@ import (
 	wfresults "github.com/checkmarx-open-labs/cxone-sdk-golang/workflows/results"
 	wfroles "github.com/checkmarx-open-labs/cxone-sdk-golang/workflows/roles"
 	wfscans "github.com/checkmarx-open-labs/cxone-sdk-golang/workflows/scans"
+	wfscm "github.com/checkmarx-open-labs/cxone-sdk-golang/workflows/scm"
 	wfusers "github.com/checkmarx-open-labs/cxone-sdk-golang/workflows/users"
 )
 
@@ -711,6 +712,42 @@ type MigrationHandle struct {
 // an [wfmigration.ImportInspector].
 func (h *MigrationHandle) GetImport(ctx context.Context, importID string) (*wfmigration.ImportInspector, error) {
 	return wfmigration.FromImportID(ctx, h.backend, importID)
+}
+
+// SCM returns the high-level source-control-management workflow handle.
+func (c *Client) SCM() *SCMHandle {
+	return &SCMHandle{
+		backend: &wfscm.Backend{Executor: c.executor, BaseURL: c.rootURL()},
+	}
+}
+
+// SCMHandle wraps the SCM workflow.
+type SCMHandle struct {
+	backend *wfscm.Backend
+}
+
+// Reconnect points an existing project at a different repository, preserving
+// the project and its scan history. It disconnects the project from its
+// current integration and submits a conversion against the target repo,
+// returning an inspector for the resulting asynchronous process.
+//
+// The two calls are not atomic — see [wfscm.Reconnect] for the failure
+// semantics. Pass the returned inspector to [wfscm.WaitUntilComplete] to poll
+// it to a terminal state.
+func (h *SCMHandle) Reconnect(ctx context.Context, projectID string, req wfscm.ReconnectRequest) (*wfscm.ConversionInspector, error) {
+	return wfscm.Reconnect(ctx, h.backend, projectID, req)
+}
+
+// Disconnect reverts a code repository project to a manual project, keeping
+// its scan history.
+func (h *SCMHandle) Disconnect(ctx context.Context, projectID string) error {
+	return wfscm.Disconnect(ctx, h.backend, projectID)
+}
+
+// GetConversion loads the current state of a conversion process and returns a
+// [wfscm.ConversionInspector]. Process data is retained for 7 days.
+func (h *SCMHandle) GetConversion(ctx context.Context, processID string) (*wfscm.ConversionInspector, error) {
+	return wfscm.FromProcessID(ctx, h.backend, processID)
 }
 
 // Advanced returns a typed handle to the SDK's low-level endpoint layer.
