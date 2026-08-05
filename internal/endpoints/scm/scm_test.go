@@ -78,3 +78,31 @@ func TestGetRepositoryValidation(t *testing.T) {
 		t.Error("expected error for zero repositoryID")
 	}
 }
+
+func TestDisconnectProject(t *testing.T) {
+	var gotMethod string
+	exec, base := newExec(t, func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		if !strings.HasSuffix(r.URL.Path, "/projects/proj-cx-sunny007/disconnect") {
+			t.Errorf("path = %q", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+	err := scm.DisconnectProject(context.Background(), exec, base, "proj-cx-sunny007")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotMethod != http.MethodPost {
+		t.Errorf("method = %q, want POST", gotMethod)
+	}
+}
+
+func TestDisconnectProjectValidation(t *testing.T) {
+	exec, base := newExec(t, func(w http.ResponseWriter, r *http.Request) {
+		t.Error("should not reach server")
+	})
+	err := scm.DisconnectProject(context.Background(), exec, base, "")
+	if err == nil {
+		t.Error("expected error for empty projectID")
+	}
+}

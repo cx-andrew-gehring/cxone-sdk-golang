@@ -901,7 +901,9 @@ func (s *SCM) ListIntegrations(ctx context.Context) ([]models.SCMIntegration, er
 func (s *SCM) GetRepository(ctx context.Context, repositoryID uint64) (*models.SCMRepository, error) {
 	return scm.GetRepository(ctx, s.h.executor, s.h.rootURL, repositoryID)
 }
-
+func (s *SCM) DisconnectProject(ctx context.Context, projectID string) error {
+	return scm.DisconnectProject(ctx, s.h.executor, s.h.rootURL, projectID)
+}
 // ----- PresetManager ---------------------------------------------------------
 
 // PresetManager wraps the preset-manager endpoints for SAST/IAC preset CRUD

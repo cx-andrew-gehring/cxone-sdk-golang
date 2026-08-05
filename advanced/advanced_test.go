@@ -139,3 +139,30 @@ func TestAdvancedUploadsEndToEnd(t *testing.T) {
 		t.Errorf("returned URL = %q", url)
 	}
 }
+
+func TestAdvancedSCMDisconnectEndToEnd(t *testing.T) {
+	var (
+		gotMethod string
+		gotPath   string
+		gotAuth   string
+	)
+	c := newClientAgainst(t, func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		gotAuth = r.Header.Get("Authorization")
+		w.WriteHeader(http.StatusOK)
+	})
+	err := c.Advanced().SCM().DisconnectProject(context.Background(), "proj-123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotMethod != http.MethodPost {
+		t.Errorf("method = %q, want POST", gotMethod)
+	}
+	if gotPath != "/api/repos-manager/projects/proj-123/disconnect" {
+		t.Errorf("path = %q", gotPath)
+	}
+	if gotAuth != "Bearer tok-1" {
+		t.Errorf("Authorization = %q", gotAuth)
+	}
+}

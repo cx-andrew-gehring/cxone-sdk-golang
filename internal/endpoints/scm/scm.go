@@ -19,6 +19,7 @@ import (
 const (
 	IntegrationsPath = "api/repos-manager/v2/scms"
 	RepoPath         = "api/repos-manager/repo"
+	ProjectsPath     = "api/repos-manager/projects"
 )
 
 // ListIntegrations returns every SCM integration configured for the tenant.
@@ -50,4 +51,17 @@ func GetRepository(ctx context.Context, e *transport.Executor, baseURL string, r
 		return nil, err
 	}
 	return &out, nil
+}
+
+// DisconnectProject detaches a Code Repository Integration project from its
+// SCM repository, converting it to a manual project. History is preserved and
+// any configured webhook is removed.
+// POST /api/repos-manager/projects/{projectId}/disconnect → 200.
+func DisconnectProject(ctx context.Context, e *transport.Executor, baseURL, projectID string) error {
+	if projectID == "" {
+		return &cxerrors.ConfigurationError{Field: "projectID", Reason: "must not be empty"}
+	}
+	return transport.DoJSON(ctx, e, http.MethodPost,
+		transport.JoinURL(baseURL, ProjectsPath+"/"+projectID+"/disconnect"),
+		nil, nil, []int{http.StatusOK}, nil)
 }

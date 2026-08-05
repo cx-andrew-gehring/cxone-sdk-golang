@@ -167,6 +167,7 @@ The [`examples/`](./examples/) directory ships runnable programs that demonstrat
 | [`analytics-dashboard`](./examples/analytics-dashboard/) | Severity KPIs, MTTR, most-common vulnerabilities |
 | [`import-migration`](./examples/import-migration/) | List imports, start import, poll with ImportInspector |
 | [`scan-comparison`](./examples/scan-comparison/) | Diff two scans into new/resolved/recurrent counts by severity, plus not-exploitable summary |
+| [`scm-disconnect`](./examples/scm-disconnect/) | Disconnect a project from its SCM repository|
 
 Run any example:
 
