@@ -26,6 +26,7 @@ import (
 	"net/url"
 
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/access"
+	aitriageep "github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/aitriage"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/analytics"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/applications"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/audit"
@@ -41,15 +42,14 @@ import (
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/presetmanager"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/projects"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/reports"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/roles"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/results"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/risks"
-	aitriageep "github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/aitriage"
+	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/roles"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/sastmetadata"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/sastresults"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/scm"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/scanoverview"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/scans"
+	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/scm"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/telemetry"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/tenant"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/uploads"
@@ -309,10 +309,21 @@ func (u *Uploads) GetPresignedURL(ctx context.Context) (string, error) {
 }
 
 // PutFile uploads body (size bytes) to the supplied presigned URL using the
-// client's pooled HTTP client. See [uploads.PutFile] for the rationale on
-// why this bypasses the funnel.
+// client's pooled HTTP client. See [uploads.PutFileAuth] for why this
+// bypasses the funnel. The client's bearer token is attached if and only if
+// the presigned URL is on the client's own API origin (storage fronted by the
+// API host); URLs on any other host (S3/MinIO) get no Authorization header.
+// The upload is bounded by the HTTP client's Timeout, or a two-hour ceiling
+// when that is zero.
 func (u *Uploads) PutFile(ctx context.Context, presignedURL string, body io.Reader, size int64) error {
-	return uploads.PutFile(ctx, u.h.httpClient, presignedURL, body, size)
+	return uploads.PutFileAuth(ctx, u.h.httpClient, presignedURL, body, size, u.auth())
+}
+
+func (u *Uploads) auth() *uploads.Auth {
+	if u.h.executor == nil {
+		return nil
+	}
+	return &uploads.Auth{Authenticator: u.h.executor.Authenticator(), APIBaseURL: u.h.rootURL}
 }
 
 // UploadFromReader is a convenience that combines [Uploads.GetPresignedURL]

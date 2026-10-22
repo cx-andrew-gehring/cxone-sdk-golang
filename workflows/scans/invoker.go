@@ -145,7 +145,8 @@ func (i *Invoker) WithProjectTags(tags map[string]string) *Invoker {
 
 // WithUploadTimeout gives the upload-mode presigned-URL PUT its own
 // deadline d, which is not capped by the HTTP client's Timeout. Without it
-// the client's timeout applies to the PUT. d must be > 0.
+// the client's timeout applies to the PUT (or a two-hour ceiling if the
+// client has none). d must be > 0.
 func (i *Invoker) WithUploadTimeout(d time.Duration) *Invoker {
 	if d <= 0 && i.configErr == nil {
 		i.configErr = &cxerrors.ConfigurationError{Field: "UploadTimeout", Reason: "must be > 0"}
@@ -327,13 +328,15 @@ func (i *Invoker) buildUploadHandler(ctx context.Context) (json.RawMessage, erro
 	if err != nil {
 		return nil, err
 	}
-	// Step 2: PUT the body. uploads.PutFile bypasses the funnel because the
-	// presigned URL points at the object store, not the API host.
+	// Step 2: PUT the body. This bypasses the funnel; the bearer token is
+	// attached only when the presigned URL is on the API origin itself
+	// (storage fronted by the API host), never for an external object store.
+	pa := &uploads.Auth{Authenticator: i.backend.Executor.Authenticator(), APIBaseURL: i.backend.BaseURL}
 	var putErr error
 	if i.uploadTimeout > 0 {
-		putErr = uploads.PutFileWithTimeout(ctx, i.httpClient, uploadURL, i.uploadBody, i.uploadSize, i.uploadTimeout)
+		putErr = uploads.PutFileAuthWithTimeout(ctx, i.httpClient, uploadURL, i.uploadBody, i.uploadSize, pa, i.uploadTimeout)
 	} else {
-		putErr = uploads.PutFile(ctx, i.httpClient, uploadURL, i.uploadBody, i.uploadSize)
+		putErr = uploads.PutFileAuth(ctx, i.httpClient, uploadURL, i.uploadBody, i.uploadSize, pa)
 	}
 	if putErr != nil {
 		return nil, putErr
