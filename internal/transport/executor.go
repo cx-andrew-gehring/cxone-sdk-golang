@@ -60,6 +60,12 @@ func NewExecutor(cfg Config) *Executor {
 	return &Executor{cfg: cfg}
 }
 
+// Authenticator returns the token source the funnel uses. It exists for the
+// one documented non-funnel call, the presigned upload PUT, which must send
+// the same (lazily fetched, refresh-on-401) bearer token when the storage URL
+// is on the API origin.
+func (e *Executor) Authenticator() auth.Authenticator { return e.cfg.Authenticator }
+
 // Do executes req per CLAUDE.md §4.3:
 //
 //  1. Apply per-call timeout (req.Timeout overrides the executor default).
