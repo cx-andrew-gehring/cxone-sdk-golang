@@ -76,7 +76,10 @@ func GetOrCreateInApplicationByName(ctx context.Context, backend *Backend, proje
 }
 
 func findProjectByName(ctx context.Context, b *Backend, name string) (*models.ProjectResponseModel, error) {
-	q := url.Values{"name": {name}, "limit": {"10"}}
+	// names= is an exact-match filter (projects.yaml). The previous name=
+	// lookup was a substring match capped at limit=10, which could miss the
+	// exact project (when >10 names contain it) and cause a duplicate create.
+	q := url.Values{"names": {name}, "limit": {"10"}}
 	coll, err := endpoints.List(ctx, b.Executor, b.BaseURL, q)
 	if err != nil {
 		return nil, err

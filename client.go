@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/url"
 	"sync"
@@ -14,6 +15,8 @@ import (
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/advanced"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/auth"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/cxerrors"
+	projectsep "github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/projects"
+	scansep "github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/scans"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/retry"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/transport"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/models"
@@ -504,6 +507,51 @@ func (h *ProjectsHandle) GetOrCreateInApplicationByName(ctx context.Context, pro
 	return wfprojects.GetOrCreateInApplicationByName(ctx, h.backend, projectName, applicationName)
 }
 
+// IterByNameRegex iterates projects whose name matches the regular
+// expression pattern (GET /api/projects?name-regex=). Pattern syntax is the
+// server's. Pass-through only: the SDK does not compile the pattern.
+func (h *ProjectsHandle) IterByNameRegex(pattern string) *pagination.Iterator[models.ProjectResponseModel] {
+	return projectsep.Iter(h.backend.Executor, h.backend.BaseURL, url.Values{"name-regex": {pattern}}, pagination.Config{})
+}
+
+// Delete removes a project. When cancelRunning is true, every Queued or
+// Running scan of the project is first cancelled (PATCH /api/scans/{id}
+// {"status":"Canceled"}) so the delete is not blocked by active scans.
+// A 404 at any step (project or scan already gone) counts as success.
+func (h *ProjectsHandle) Delete(ctx context.Context, projectID string, cancelRunning bool) error {
+	if projectID == "" {
+		return &ConfigurationError{Field: "projectID", Reason: "is required"}
+	}
+	if cancelRunning {
+		it := scansep.Iter(h.backend.Executor, h.backend.BaseURL, url.Values{
+			"project-id": {projectID},
+			"statuses":   {models.ScanQueued, models.ScanRunning},
+		}, pagination.Config{})
+		// Collect first: cancelling while paging could shift offsets.
+		active, err := pagination.Collect(ctx, it)
+		if err != nil && !isNotFound(err) {
+			return err
+		}
+		for _, sc := range active {
+			if sc.Status != models.ScanQueued && sc.Status != models.ScanRunning {
+				continue
+			}
+			if err := scansep.Cancel(ctx, h.backend.Executor, h.backend.BaseURL, sc.ID); err != nil && !isNotFound(err) {
+				return err
+			}
+		}
+	}
+	if err := projectsep.Delete(ctx, h.backend.Executor, h.backend.BaseURL, projectID); err != nil && !isNotFound(err) {
+		return err
+	}
+	return nil
+}
+
+func isNotFound(err error) bool {
+	var re *ResponseError
+	return errors.As(err, &re) && re.StatusCode == http.StatusNotFound
+}
+
 // ScansHandle wraps the scans workflow with method-style ergonomics.
 type ScansHandle struct {
 	client  *Client
@@ -513,6 +561,32 @@ type ScansHandle struct {
 // Get loads a scan by id and returns a populated [wfscans.ScanInspector].
 func (h *ScansHandle) Get(ctx context.Context, scanID string) (*wfscans.ScanInspector, error) {
 	return wfscans.FromScanID(ctx, h.backend, scanID)
+}
+
+// ListForProject returns every scan of the project, newest first
+// (GET /api/scans?project-id=...&sort=-created_at), paging to exhaustion.
+// A project with no scans yields an empty (non-nil) slice.
+func (h *ScansHandle) ListForProject(ctx context.Context, projectID string) ([]*wfscans.ScanInspector, error) {
+	if projectID == "" {
+		return nil, &ConfigurationError{Field: "projectID", Reason: "is required"}
+	}
+	it := scansep.Iter(h.backend.Executor, h.backend.BaseURL, url.Values{
+		"project-id": {projectID},
+		"sort":       {"-created_at"},
+	}, pagination.Config{})
+	page, err := pagination.Collect(ctx, it)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*wfscans.ScanInspector, 0, len(page))
+	for i := range page {
+		insp, err := wfscans.FromScanModel(h.backend, &page[i])
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, insp)
+	}
+	return out, nil
 }
 
 // NewScan returns a fluent builder for starting a new scan against the
