@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/cxerrors"
 	endpoints "github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/scans"
@@ -43,6 +45,8 @@ type Invoker struct {
 	commit       string
 	engines      []string
 	tags         map[string]string
+	projectTags  map[string]string // nil unless WithProjectTags (overwrites project tags server-side)
+	extraConfigs []models.Config   // WithConfigs passthrough
 	sastConfig   *models.SastConfig
 	scaConfig    *models.ScaConfig
 	kicsConfig   *models.KicsConfig
@@ -51,11 +55,16 @@ type Invoker struct {
 	scsCfg       *models.SCSConfig
 
 	// upload-mode state
-	uploadBody io.Reader
-	uploadSize int64
+	uploadBody    io.Reader
+	uploadSize    int64
+	uploadFormat  string
+	uploadTimeout time.Duration // 0 = use the HTTP client's own timeout
 
 	// httpClient is used for the upload-mode PUT (which bypasses the funnel).
 	httpClient *http.Client
+
+	// configs is the validated config[] array assembled by validate().
+	configs []models.Config
 
 	// validation errors collected during the chain — surfaced from Start.
 	configErr error
@@ -101,10 +110,54 @@ func (i *Invoker) ForTag(tag string) *Invoker {
 
 // WithEngines selects which Checkmarx One engines to run.
 //
-// Valid names: "sast", "sca", "kics", "containers", "apisec", "scs".
-// Unknown engine names cause Start to return a *cxerrors.ConfigurationError.
+// Valid names (the spec's config-type enum): "sast", "sca", "kics",
+// "apisec", "containers", "microengines", "aisc". "scs" is a deprecated alias
+// for "microengines". Unknown or duplicate names (after aliasing) cause Start
+// to return a *cxerrors.ConfigurationError.
 func (i *Invoker) WithEngines(engines ...string) *Invoker {
 	i.engines = append([]string(nil), engines...)
+	return i
+}
+
+// WithConfigs appends raw config[] entries to the scan request verbatim
+// (a passthrough of the spec's config array). Types must be in the spec enum
+// (see [Invoker.WithEngines]), values must be strings, and a type may appear
+// only once across WithEngines and WithConfigs; violations surface from Start
+// as a *cxerrors.ConfigurationError before any HTTP call. Multiple calls
+// accumulate. WithConfigs alone satisfies the "at least one engine" rule.
+func (i *Invoker) WithConfigs(cfgs ...models.Config) *Invoker {
+	i.extraConfigs = append(i.extraConfigs, cfgs...)
+	return i
+}
+
+// WithProjectTags sets project.tags in the scan request. NOTE: per the spec
+// this OVERWRITES the project's tags. Without this call project.tags is
+// omitted entirely. Multiple calls accumulate.
+func (i *Invoker) WithProjectTags(tags map[string]string) *Invoker {
+	if i.projectTags == nil {
+		i.projectTags = map[string]string{}
+	}
+	for k, v := range tags {
+		i.projectTags[k] = v
+	}
+	return i
+}
+
+// WithUploadTimeout gives the upload-mode presigned-URL PUT its own
+// deadline d, which is not capped by the HTTP client's Timeout. Without it
+// the client's timeout applies to the PUT. d must be > 0.
+func (i *Invoker) WithUploadTimeout(d time.Duration) *Invoker {
+	if d <= 0 && i.configErr == nil {
+		i.configErr = &cxerrors.ConfigurationError{Field: "UploadTimeout", Reason: "must be > 0"}
+	}
+	i.uploadTimeout = d
+	return i
+}
+
+// WithUploadFormat sets handler.uploadFormat for upload scans (the spec
+// uses "single" for an SBOM upload).
+func (i *Invoker) WithUploadFormat(format string) *Invoker {
+	i.uploadFormat = format
 	return i
 }
 
@@ -200,9 +253,9 @@ func (i *Invoker) Start(ctx context.Context) (*ScanInspector, error) {
 	scanReq := &models.Scan{
 		Type:    i.sourceType(),
 		Handler: handlerJSON,
-		Project: models.ScanProject{ID: i.repo.ID(), Tags: i.tags},
+		Project: models.ScanProject{ID: i.repo.ID(), Tags: i.projectTags},
 		Tags:    i.tags,
-		Config:  i.buildEngineConfigs(),
+		Config:  i.configs,
 	}
 
 	resp, err := endpoints.Create(ctx, i.backend.Executor, i.backend.BaseURL, scanReq)
@@ -215,12 +268,11 @@ func (i *Invoker) Start(ctx context.Context) (*ScanInspector, error) {
 // validate runs up-front sanity checks. CLAUDE.md §9.2 — invalid combinations
 // must surface as *cxerrors.ConfigurationError BEFORE any HTTP call.
 func (i *Invoker) validate() error {
-	if len(i.engines) == 0 {
-		return &cxerrors.ConfigurationError{Field: "Engines", Reason: "at least one engine must be selected"}
+	cfgs, err := i.assembleConfigs()
+	if err != nil {
+		return err
 	}
-	if !validEngines(i.engines) {
-		return &cxerrors.ConfigurationError{Field: "Engines", Reason: "unknown engine name; valid: sast, sca, kics, containers, apisec, scs"}
-	}
+	i.configs = cfgs
 	gitMode := i.branch != "" || i.commit != "" || i.tag != ""
 	uploadMode := i.uploadBody != nil
 	if gitMode && uploadMode {
@@ -271,28 +323,68 @@ func (i *Invoker) buildUploadHandler(ctx context.Context) (json.RawMessage, erro
 	}
 	// Step 2: PUT the body. uploads.PutFile bypasses the funnel because the
 	// presigned URL points at the object store, not the API host.
-	if err := uploads.PutFile(ctx, i.httpClient, uploadURL, i.uploadBody, i.uploadSize); err != nil {
-		return nil, err
+	var putErr error
+	if i.uploadTimeout > 0 {
+		putErr = uploads.PutFileWithTimeout(ctx, i.httpClient, uploadURL, i.uploadBody, i.uploadSize, i.uploadTimeout)
+	} else {
+		putErr = uploads.PutFile(ctx, i.httpClient, uploadURL, i.uploadBody, i.uploadSize)
+	}
+	if putErr != nil {
+		return nil, putErr
 	}
 	h := models.ScanHandler{
-		RepoURL:   i.repo.RepoURL(),
-		UploadURL: uploadURL,
+		RepoURL:      i.repo.RepoURL(),
+		UploadURL:    uploadURL,
+		UploadFormat: i.uploadFormat,
 	}
 	return json.Marshal(h)
 }
 
-// buildEngineConfigs assembles the [models.Config] entries for the engines
-// the caller selected. Each config is wrapped as { "type": "<engine>",
-// "value": { ... } }.
-//
-// Engines whose user-supplied config struct is nil get an empty
-// {"value": {}} entry — this lets the platform fall back to its
-// project-level defaults rather than disabling the engine entirely.
-func (i *Invoker) buildEngineConfigs() []models.Config {
-	out := make([]models.Config, 0, len(i.engines))
+// specConfigTypes is the config[].type enum from Scans_copy.yaml.
+var specConfigTypes = map[string]bool{
+	"sast": true, "sca": true, "kics": true, "apisec": true,
+	"containers": true, "microengines": true, "aisc": true,
+}
+
+// normalizeEngine maps deprecated aliases to spec config types.
+func normalizeEngine(n string) string {
+	if n == "scs" {
+		return "microengines"
+	}
+	return n
+}
+
+// assembleConfigs builds the final config[] array from WithEngines (typed
+// per-engine configs) plus WithConfigs passthrough entries and validates it:
+// at least one entry, types in the spec enum, no duplicate types, all values
+// strings. Engines whose typed config is nil get an entry with no value so
+// the platform applies project-level defaults.
+func (i *Invoker) assembleConfigs() ([]models.Config, error) {
+	if len(i.engines) == 0 && len(i.extraConfigs) == 0 {
+		return nil, &cxerrors.ConfigurationError{Field: "Engines", Reason: "at least one engine must be selected"}
+	}
+	out := make([]models.Config, 0, len(i.engines)+len(i.extraConfigs))
+	seen := map[string]bool{}
+	add := func(field string, c models.Config) error {
+		if !specConfigTypes[c.Type] {
+			return &cxerrors.ConfigurationError{Field: field, Reason: "unknown config type " + quote(c.Type) + "; valid: sast, sca, kics, apisec, containers, microengines, aisc (scs is a deprecated alias for microengines)"}
+		}
+		if seen[c.Type] {
+			return &cxerrors.ConfigurationError{Field: field, Reason: "duplicate config type " + quote(c.Type)}
+		}
+		seen[c.Type] = true
+		for k, v := range c.Value {
+			if _, ok := v.(string); !ok {
+				return &cxerrors.ConfigurationError{Field: field, Reason: "config " + quote(c.Type) + " value " + quote(k) + " must be a string (the API uses stringified values)"}
+			}
+		}
+		out = append(out, c)
+		return nil
+	}
 	for _, eng := range i.engines {
+		t := normalizeEngine(eng)
 		var src any
-		switch eng {
+		switch t {
 		case "sast":
 			src = i.sastConfig
 		case "sca":
@@ -303,16 +395,22 @@ func (i *Invoker) buildEngineConfigs() []models.Config {
 			src = i.containerCfg
 		case "apisec":
 			src = i.apisecCfg
-		case "scs":
+		case "microengines":
 			src = i.scsCfg
 		}
-		out = append(out, models.Config{
-			Type:  eng,
-			Value: structToMap(src),
-		})
+		if err := add("Engines", models.Config{Type: t, Value: structToMap(src)}); err != nil {
+			return nil, err
+		}
 	}
-	return out
+	for _, c := range i.extraConfigs {
+		if err := add("Configs", c); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
 }
+
+func quote(s string) string { return strconv.Quote(s) }
 
 // structToMap marshals a typed config struct into a map for the wire's
 // untyped {string: interface{}} value. nil sources collapse to nil so the
@@ -334,18 +432,4 @@ func structToMap(src any) map[string]any {
 		return nil
 	}
 	return out
-}
-
-// validEngines returns true if every name is one of the platform's known
-// engine identifiers.
-func validEngines(names []string) bool {
-	for _, n := range names {
-		switch n {
-		case "sast", "sca", "kics", "containers", "apisec", "scs":
-			// ok
-		default:
-			return false
-		}
-	}
-	return true
 }

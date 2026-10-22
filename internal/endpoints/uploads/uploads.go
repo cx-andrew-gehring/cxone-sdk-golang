@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/cxerrors"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/transport"
@@ -113,4 +114,23 @@ func PutFile(ctx context.Context, httpClient *http.Client, presignedURL string, 
 		}
 	}
 	return nil
+}
+
+// PutFileWithTimeout is [PutFile] with its own deadline d that is NOT capped
+// by httpClient.Timeout: large archives can take far longer than the API
+// client's per-request timeout. It copies httpClient with Timeout=0 (sharing
+// its Transport, so pools and proxies still apply) and bounds the request by
+// a context deadline of d instead. d must be positive.
+func PutFileWithTimeout(ctx context.Context, httpClient *http.Client, presignedURL string, body io.Reader, size int64, d time.Duration) error {
+	if httpClient == nil {
+		return &cxerrors.ConfigurationError{Field: "httpClient", Reason: "is required"}
+	}
+	if d <= 0 {
+		return &cxerrors.ConfigurationError{Field: "UploadTimeout", Reason: "must be > 0"}
+	}
+	cp := *httpClient
+	cp.Timeout = 0
+	ctx, cancel := context.WithTimeout(ctx, d)
+	defer cancel()
+	return PutFile(ctx, &cp, presignedURL, body, size)
 }
