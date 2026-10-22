@@ -3,6 +3,7 @@ package cxone
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"sync"
@@ -559,6 +560,26 @@ func (h *ResultsHandle) ListByState(ctx context.Context, scanID, state string) (
 // plus the optional filters in query.
 func (h *ResultsHandle) Iter(scanID string, query url.Values) *pagination.Iterator[*models.ScanResult] {
 	return h.reader.Iter(scanID, query)
+}
+
+// WithPagination returns a copy of the handle whose Stream/StreamSAST use
+// cfg for paging (page size and [pagination.OffsetMode]). Defaults follow
+// the OpenAPI spec per endpoint: /api/results counts pages, /api/sast-results
+// counts items (pending spike S1 confirmation).
+func (h *ResultsHandle) WithPagination(cfg pagination.Config) *ResultsHandle {
+	return &ResultsHandle{reader: h.reader.WithPagination(cfg)}
+}
+
+// Stream pages through all results of a scan and calls fn with each raw JSON
+// result. See [wfresults.Reader.Stream].
+func (h *ResultsHandle) Stream(ctx context.Context, scanID string, fn func(json.RawMessage) error) error {
+	return h.reader.Stream(ctx, scanID, fn)
+}
+
+// StreamSAST streams GET /api/sast-results with the given visible-columns.
+// See [wfresults.Reader.StreamSAST].
+func (h *ResultsHandle) StreamSAST(ctx context.Context, scanID string, visibleColumns []string, fn func(json.RawMessage) error) error {
+	return h.reader.StreamSAST(ctx, scanID, visibleColumns, fn)
 }
 
 // ReportsHandle wraps the reports workflow with method-style ergonomics.

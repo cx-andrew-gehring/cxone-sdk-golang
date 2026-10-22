@@ -20,6 +20,7 @@ package advanced
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
@@ -42,6 +43,7 @@ import (
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/reports"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/roles"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/results"
+	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/sastresults"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/risks"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/sastmetadata"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/scm"
@@ -337,6 +339,19 @@ func (r *Results) List(ctx context.Context, query url.Values) (*models.ScanResul
 // query MUST contain "scan-id".
 func (r *Results) Iter(query url.Values, cfg pagination.Config) *pagination.Iterator[*models.ScanResult] {
 	return results.Iter(r.h.executor, r.h.rootURL, query, cfg)
+}
+
+// IterRaw returns an iterator over the raw JSON of each result (unknown
+// fields preserved). query MUST contain "scan-id". See results.IterRaw for
+// the paging-mode note.
+func (r *Results) IterRaw(query url.Values, cfg pagination.Config) *pagination.Iterator[json.RawMessage] {
+	return results.IterRaw(r.h.executor, r.h.rootURL, query, cfg)
+}
+
+// IterSASTRaw returns an iterator over GET /api/sast-results as raw JSON.
+// query MUST contain "scan-id" and may contain "visible-columns".
+func (r *Results) IterSASTRaw(query url.Values, cfg pagination.Config) *pagination.Iterator[json.RawMessage] {
+	return sastresults.IterRaw(r.h.executor, r.h.rootURL, query, cfg)
 }
 
 // ----- Reports ---------------------------------------------------------------

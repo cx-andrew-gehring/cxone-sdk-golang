@@ -67,6 +67,19 @@ import (
 // [Config.PageRetriesMax] times before propagating to the caller.
 type PageFetcher[T any] func(ctx context.Context, offset, limit int) ([]T, error)
 
+// OffsetMode selects how the iterator advances the "offset" query value.
+type OffsetMode int
+
+const (
+	// OffsetModeDefault defers to OffsetIsByCount (or, for endpoint-specific
+	// iterators such as results.IterRaw, to the endpoint's documented default).
+	OffsetModeDefault OffsetMode = iota
+	// OffsetModePages advances offset by 1 per page (spec: "number of pages to skip").
+	OffsetModePages
+	// OffsetModeItems advances offset by PageSize per page ("number of results to skip").
+	OffsetModeItems
+)
+
 // Config controls iterator behavior. Zero values pick sensible defaults
 // (PageSize=100, PageRetriesMax=5, PageRetryDelay=3s, OffsetIsByCount=true).
 type Config struct {
@@ -81,6 +94,13 @@ type Config struct {
 	// (true — the typical "offset" / "skip" REST style) or by 1 (false —
 	// page-number style). Default true.
 	OffsetIsByCount bool
+
+	// OffsetMode, when not [OffsetModeDefault], takes precedence over
+	// OffsetIsByCount. It exists so callers (and endpoint-specific
+	// iterators) can express "use the spec default for this endpoint"
+	// (the zero value) separately from an explicit choice of page-number
+	// or item-count paging.
+	OffsetMode OffsetMode
 
 	// PageRetriesMax is the maximum number of retry attempts for a single
 	// page fetch (CLAUDE.md §10.1). The first attempt is NOT counted, so
@@ -225,7 +245,14 @@ func (it *Iterator[T]) fetchNextPage(ctx context.Context) error {
 // advanceOffset increments the iterator's offset for the next page,
 // honoring OffsetIsByCount.
 func (it *Iterator[T]) advanceOffset(pageLen int) {
-	if it.cfg.OffsetIsByCount {
+	byCount := it.cfg.OffsetIsByCount
+	switch it.cfg.OffsetMode {
+	case OffsetModePages:
+		byCount = false
+	case OffsetModeItems:
+		byCount = true
+	}
+	if byCount {
 		it.offset += it.cfg.PageSize
 	} else {
 		it.offset++

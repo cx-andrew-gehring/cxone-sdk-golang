@@ -289,3 +289,28 @@ func TestIteratorEmptyOnFirstPage(t *testing.T) {
 		t.Errorf("got %v", all)
 	}
 }
+
+func TestOffsetModeOverridesOffsetIsByCount(t *testing.T) {
+	run := func(cfg pagination.Config) []int {
+		var offsets []int
+		fetch := func(_ context.Context, offset, _ int) ([]int, error) {
+			offsets = append(offsets, offset)
+			if len(offsets) >= 3 {
+				return nil, nil
+			}
+			return []int{1}, nil
+		}
+		if _, err := pagination.Collect(context.Background(), pagination.New(cfg, fetch)); err != nil {
+			t.Fatal(err)
+		}
+		return offsets
+	}
+	pages := run(pagination.Config{PageSize: 50, OffsetMode: pagination.OffsetModePages})
+	if pages[0] != 0 || pages[1] != 1 || pages[2] != 2 {
+		t.Errorf("pages mode offsets = %v", pages)
+	}
+	items := run(pagination.Config{PageSize: 50, OffsetMode: pagination.OffsetModeItems})
+	if items[1] != 50 || items[2] != 100 {
+		t.Errorf("items mode offsets = %v", items)
+	}
+}
