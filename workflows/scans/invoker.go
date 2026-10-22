@@ -161,7 +161,13 @@ func (i *Invoker) WithUploadFormat(format string) *Invoker {
 	return i
 }
 
-// WithTags adds key/value tags to the scan. Multiple calls accumulate.
+// WithTags adds key/value tags to the scan itself (the request's top-level
+// "tags"). Multiple calls accumulate.
+//
+// Behaviour change: WithTags no longer sets project.tags. Earlier versions
+// sent these tags as the project's tags, which overwrites the project's
+// existing tags server-side. To set project tags deliberately use
+// [Invoker.WithProjectTags].
 func (i *Invoker) WithTags(tags map[string]string) *Invoker {
 	for k, v := range tags {
 		i.tags[k] = v

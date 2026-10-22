@@ -2,6 +2,7 @@ package projects
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 
@@ -32,9 +33,31 @@ func GetOrCreateByName(ctx context.Context, backend *Backend, template *models.P
 
 	created, err := endpoints.Create(ctx, backend.Executor, backend.BaseURL, template)
 	if err != nil {
+		// Lost a create race (another caller created the same name between
+		// our lookup and create): on a 4xx conflict/duplicate, re-run the
+		// exact-name lookup once and return the winner.
+		if isClientConflict(err) {
+			if found, lerr := findProjectByName(ctx, backend, template.Name); lerr == nil && found != nil {
+				return &ProjectRepoConfig{backend: backend, project: found}, nil
+			}
+		}
 		return nil, err
 	}
 	return &ProjectRepoConfig{backend: backend, project: created}, nil
+}
+
+// isClientConflict reports whether err is an HTTP 4xx rejection (the shape of
+// a duplicate-name conflict: 400/409) of the create call.
+func isClientConflict(err error) bool {
+	var re *cxerrors.ResponseError
+	if errors.As(err, &re) {
+		return re.StatusCode >= 400 && re.StatusCode < 500 && re.StatusCode != 401 && re.StatusCode != 403 && re.StatusCode != 429
+	}
+	var ce *cxerrors.CommunicationError
+	if errors.As(err, &ce) {
+		return ce.StatusCode >= 400 && ce.StatusCode < 500 && ce.StatusCode != 401 && ce.StatusCode != 403 && ce.StatusCode != 429
+	}
+	return false
 }
 
 // GetOrCreateInApplicationByName finds or creates a project with the given
