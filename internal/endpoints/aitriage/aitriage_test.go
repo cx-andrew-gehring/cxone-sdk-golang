@@ -188,7 +188,7 @@ func TestGetResultDetail(t *testing.T) {
 	}
 	if d.TriageStatus != "PROPOSED_NOT_EXPLOITABLE" || d.Analysis.Confidence.Score != 0.9 ||
 		d.ExploitabilityStatus != "NOT_EXPLOITABLE" || d.GroupID == nil || *d.GroupID != "g" ||
-		len(d.ReasoningTrace.VerificationSteps) != 1 || d.TriagedAt.IsZero() {
+		len(d.ReasoningTrace.VerificationSteps) != 1 || d.TriagedAt == nil || d.TriagedAt.IsZero() {
 		t.Errorf("detail %+v", d)
 	}
 }
@@ -208,5 +208,86 @@ func TestGetResult404StaysResponseError(t *testing.T) {
 	var re *cxerrors.ResponseError
 	if !errors.As(err, &re) || re.StatusCode != 404 {
 		t.Errorf("got %v", err)
+	}
+}
+
+func TestSubmitEmptyBodyDefaultsPublishedTrue(t *testing.T) {
+	exec, base := newExec(t, func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusAccepted) })
+	out, err := aitriage.Submit(context.Background(), exec, base, &models.TriageRequest{ScanID: "s"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !out.Published {
+		t.Errorf("empty 202 body must default published=true: %+v", out)
+	}
+}
+
+func TestGetResultMalformedBodies(t *testing.T) {
+	for name, body := range map[string]string{
+		"empty":            ``,
+		"null":             `null`,
+		"empty object":     `{}`,
+		"null jobStatus":   `{"projectID":"p","groupID":"g","jobStatus":null}`,
+		"empty jobStatus":  `{"projectID":"p","groupID":"g","jobStatus":""}`,
+		"unrelated fields": `{"foo":"bar"}`,
+	} {
+		exec, base := newExec(t, func(w http.ResponseWriter, r *http.Request) { _, _ = io.WriteString(w, body) })
+		env, err := aitriage.GetResult(context.Background(), exec, base, "p", "g")
+		var re *cxerrors.ResponseError
+		if !errors.As(err, &re) || !errors.Is(err, cxerrors.ErrResponse) {
+			t.Errorf("%s: want ResponseError, got env=%+v err=%v", name, env, err)
+		}
+		var te *cxerrors.TriageError
+		if errors.As(err, &te) {
+			t.Errorf("%s: must not be TriageError", name)
+		}
+	}
+}
+
+func TestGetResultDetailInProgressTriageStatus(t *testing.T) {
+	exec, base := newExec(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, `{"triageStatus":"IN_PROGRESS"}`)
+	})
+	env, err := aitriage.GetResult(context.Background(), exec, base, "p", "g")
+	if err != nil || env.Detail == nil || env.Detail.TriageStatus != "IN_PROGRESS" {
+		t.Fatalf("got %+v %v", env, err)
+	}
+}
+
+func TestGetResultTriagedAtTolerant(t *testing.T) {
+	for name, v := range map[string]string{"empty": `""`, "bad": `"yesterday"`, "null": `null`, "number": `5`} {
+		exec, base := newExec(t, func(w http.ResponseWriter, r *http.Request) {
+			_, _ = io.WriteString(w, `{"resultID":"r","triageStatus":"VULNERABLE","triagedAt":`+v+`}`)
+		})
+		env, err := aitriage.GetResult(context.Background(), exec, base, "p", "g")
+		if err != nil || env.Detail == nil || env.Detail.TriageStatus != "VULNERABLE" || env.Detail.TriagedAt != nil {
+			t.Errorf("%s: got %+v %v", name, env, err)
+		}
+	}
+}
+
+func TestGetResult400And402StayResponseError(t *testing.T) {
+	for _, code := range []int{400, 402} {
+		exec, base := newExec(t, func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(code) })
+		_, err := aitriage.GetResult(context.Background(), exec, base, "p1", "g")
+		var re *cxerrors.ResponseError
+		var te *cxerrors.TriageError
+		if !errors.As(err, &re) || re.StatusCode != code || errors.As(err, &te) {
+			t.Errorf("%d: got %v", code, err)
+		}
+	}
+}
+
+func TestGetResultSlashInGroupIDEscaped(t *testing.T) {
+	var uri string
+	exec, base := newExec(t, func(w http.ResponseWriter, r *http.Request) {
+		uri = r.RequestURI
+		_, _ = io.WriteString(w, `{"projectID":"p","groupID":"a/b","jobStatus":"IN_PROGRESS"}`)
+	})
+	if _, err := aitriage.GetResult(context.Background(), exec, base, "p", "a/b#c"); err != nil {
+		t.Fatal(err)
+	}
+	if uri != "/api/ai-triage/triage/p/a%2Fb%23c" {
+		t.Errorf("RequestURI %q", uri)
 	}
 }

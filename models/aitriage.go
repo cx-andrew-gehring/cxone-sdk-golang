@@ -3,6 +3,7 @@ package models
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"time"
 )
 
@@ -107,21 +108,42 @@ type TriageReasoningTrace struct {
 // TriageResultDetail is the completed triage result
 // (TriageResultDetailSchema).
 type TriageResultDetail struct {
-	ResultID             string                `json:"resultID"`
-	Scanner              string                `json:"scanner"`
-	TriageStatus         string                `json:"triageStatus"`
-	ReachabilityStatus   string                `json:"reachabilityStatus"`
-	ExploitabilityStatus string                `json:"exploitabilityStatus"`
-	AttackabilityStatus  string                `json:"attackabilityStatus,omitempty"`
-	Summary              string                `json:"summary,omitempty"`
-	TriagedAt            time.Time             `json:"triagedAt"`
-	Analysis             TriageAnalysis        `json:"analysis"`
-	Metadata             TriageMetadata        `json:"metadata"`
-	ReasoningTrace       *TriageReasoningTrace `json:"reasoningTrace,omitempty"`
-	MockOrigin           bool                  `json:"mockOrigin,omitempty"`
-	GroupID              *string               `json:"groupId,omitempty"`
-	ProjectID            *string               `json:"projectId,omitempty"`
-	SourceProjectID      *string               `json:"sourceProjectId,omitempty"`
+	ResultID             string `json:"resultID"`
+	Scanner              string `json:"scanner"`
+	TriageStatus         string `json:"triageStatus"`
+	ReachabilityStatus   string `json:"reachabilityStatus"`
+	ExploitabilityStatus string `json:"exploitabilityStatus"`
+	AttackabilityStatus  string `json:"attackabilityStatus,omitempty"`
+	Summary              string `json:"summary,omitempty"`
+	// TriagedAt is nil when the server sent null, an empty string or an
+	// unparseable timestamp (decoding is deliberately tolerant).
+	TriagedAt       *time.Time            `json:"triagedAt,omitempty"`
+	Analysis        TriageAnalysis        `json:"analysis"`
+	Metadata        TriageMetadata        `json:"metadata"`
+	ReasoningTrace  *TriageReasoningTrace `json:"reasoningTrace,omitempty"`
+	MockOrigin      bool                  `json:"mockOrigin,omitempty"`
+	GroupID         *string               `json:"groupId,omitempty"`
+	ProjectID       *string               `json:"projectId,omitempty"`
+	SourceProjectID *string               `json:"sourceProjectId,omitempty"`
+}
+
+// UnmarshalJSON decodes the detail tolerantly: triagedAt that is not a valid
+// RFC 3339 timestamp is left nil instead of failing the whole decode.
+func (d *TriageResultDetail) UnmarshalJSON(data []byte) error {
+	type plain TriageResultDetail
+	aux := struct {
+		*plain
+		TriagedAt json.RawMessage `json:"triagedAt"`
+	}{plain: (*plain)(d)}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	d.TriagedAt = nil
+	var t time.Time
+	if len(aux.TriagedAt) > 0 && json.Unmarshal(aux.TriagedAt, &t) == nil && !t.IsZero() {
+		d.TriagedAt = &t
+	}
+	return nil
 }
 
 // TriageResultEnvelope is the response of
@@ -131,7 +153,9 @@ type TriageResultDetail struct {
 //     JobStatus is set and Detail is nil.
 //   - detail shape: the full result; Detail is set and JobStatus is empty.
 //
-// The shapes are told apart by the presence of "jobStatus".
+// The shapes are told apart by a non-empty "jobStatus". A body with neither
+// a jobStatus nor a detail (resultID or triageStatus), including null, fails
+// to decode.
 type TriageResultEnvelope struct {
 	ProjectID string
 	GroupID   string
@@ -150,16 +174,19 @@ func (e *TriageResultEnvelope) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*e = TriageResultEnvelope{}
-	if probe.JobStatus != nil {
-		e.ProjectID, e.GroupID, e.JobStatus = probe.ProjectID, probe.GroupID, *probe.JobStatus
-		return nil
-	}
 	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
+		return errors.New("triage result: null body")
+	}
+	if probe.JobStatus != nil && *probe.JobStatus != "" {
+		e.ProjectID, e.GroupID, e.JobStatus = probe.ProjectID, probe.GroupID, *probe.JobStatus
 		return nil
 	}
 	var d TriageResultDetail
 	if err := json.Unmarshal(data, &d); err != nil {
 		return err
+	}
+	if d.ResultID == "" && d.TriageStatus == "" {
+		return errors.New("triage result: neither jobStatus nor detail (resultID/triageStatus) present")
 	}
 	e.Detail = &d
 	if d.ProjectID != nil {

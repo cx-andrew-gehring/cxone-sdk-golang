@@ -9,6 +9,8 @@ package aitriage
 
 import (
 	"context"
+	"errors"
+	"net/http"
 
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/cxerrors"
 	endpoints "github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/aitriage"
@@ -71,35 +73,71 @@ type ResultInspector struct {
 // Envelope returns the raw decoded response.
 func (r *ResultInspector) Envelope() *models.TriageResultEnvelope { return r.env }
 
-// Failed reports whether the triage job failed: jobStatus FAILED, or a
-// detail whose triageStatus is FAILED.
-func (r *ResultInspector) Failed() bool {
+// Triage status values from the TriageStatus enum in AI-Triage.yaml. They
+// appear as jobStatus (in-progress shape) or triageStatus (detail shape).
+const (
+	StatusNotTriaged             = "NOT_TRIAGED"
+	StatusInProgress             = "IN_PROGRESS"
+	StatusFailed                 = "FAILED"
+	StatusVulnerable             = "VULNERABLE"
+	StatusProposedNotExploitable = "PROPOSED_NOT_EXPLOITABLE"
+	StatusUncertain              = "UNCERTAIN"
+	StatusRiskAccepted           = "RISK_ACCEPTED"
+)
+
+// Status returns the effective status string: the detail's triageStatus when
+// the detail shape was returned, otherwise jobStatus.
+func (r *ResultInspector) Status() string {
 	if r.env == nil {
-		return false
+		return ""
 	}
 	if r.env.Detail != nil {
-		return r.env.Detail.TriageStatus == "FAILED"
+		return r.env.Detail.TriageStatus
 	}
-	return r.env.JobStatus == "FAILED"
+	return r.env.JobStatus
 }
 
-// Done reports whether polling can stop: the job failed, or the full detail
-// has been returned (and is not itself reporting IN_PROGRESS).
+// Done reports whether polling can stop: the status is terminal, i.e.
+// VULNERABLE, PROPOSED_NOT_EXPLOITABLE, UNCERTAIN, RISK_ACCEPTED or FAILED.
+// NOT_TRIAGED, IN_PROGRESS and unrecognised statuses are not done.
 func (r *ResultInspector) Done() bool {
-	if r.env == nil {
-		return false
+	switch r.Status() {
+	case StatusVulnerable, StatusProposedNotExploitable, StatusUncertain, StatusRiskAccepted, StatusFailed:
+		return true
 	}
-	if r.env.Detail != nil {
-		return r.env.Detail.TriageStatus != "IN_PROGRESS"
-	}
-	return r.env.JobStatus == "FAILED"
+	return false
 }
 
-// Detail returns the completed result, or nil while the job is in progress
-// or failed.
+// Failed reports whether the triage job failed (status FAILED, in either
+// shape). A failed result is also Done.
+func (r *ResultInspector) Failed() bool { return r.Status() == StatusFailed }
+
+// Unknown reports whether the status is non-empty but not in the spec enum
+// (for example a value added by a newer service). Unknown results are neither
+// Done nor Failed; callers should stop polling or log rather than spin.
+func (r *ResultInspector) Unknown() bool {
+	switch r.Status() {
+	case "", StatusNotTriaged, StatusInProgress, StatusFailed, StatusVulnerable,
+		StatusProposedNotExploitable, StatusUncertain, StatusRiskAccepted:
+		return false
+	}
+	return true
+}
+
+// Detail returns the detail payload whenever the server returned the detail
+// shape, whatever its status (including IN_PROGRESS or FAILED, where the
+// analysis fields may be empty); it is nil for the jobStatus-only shape.
+// Check Done and Failed before trusting the analysis fields.
 func (r *ResultInspector) Detail() *models.TriageResultDetail {
 	if r.env == nil {
 		return nil
 	}
 	return r.env.Detail
+}
+
+// IsNotFound reports whether err (from GetResult) is an HTTP 404: no triage
+// exists yet for that project/group.
+func IsNotFound(err error) bool {
+	var re *cxerrors.ResponseError
+	return errors.As(err, &re) && re.StatusCode == http.StatusNotFound
 }

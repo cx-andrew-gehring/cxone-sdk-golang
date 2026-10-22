@@ -14,6 +14,7 @@ import (
 	"strconv"
 
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/cxerrors"
+	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/redact"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/transport"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/models"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/pagination"
@@ -88,15 +89,26 @@ func ListRisks(ctx context.Context, e *transport.Executor, baseURL string, query
 	return &out, nil
 }
 
+// MaxPages is the hard cap on pages fetched by one [Iter]. At the default page
+// size of 200 it allows 2,000,000 risks, far beyond any real project; reaching
+// it means the server is misbehaving and Iter fails with a ResponseError rather
+// than looping forever.
+const MaxPages = 10000
+
 // Iter returns an item-yielding iterator over every risk matching query
 // (which must include projectId). Offset/limit are managed by the iterator;
-// the default page size is 100 and is clamped to the service maximum of 200.
+// the default page size is 200 (the service maximum) and larger values are
+// clamped to 200.
+//
+// Iteration stops, without an extra empty-page request, as soon as
+// offset+len(page) reaches metaData.filteredResults (falling back to
+// totalResults when filteredResults is 0 on a non-empty page) or a page is
+// shorter than the requested limit. A stall guard also stops iteration when a
+// page contains no risk ids not already seen (a server ignoring offset), and
+// MaxPages bounds the total number of requests.
 func Iter(e *transport.Executor, baseURL string, query url.Values, cfg pagination.Config) *pagination.Iterator[models.Risk] {
 	cfg.OffsetIsByCount = true
-	if cfg.PageSize == 0 {
-		cfg.PageSize = 100
-	}
-	if cfg.PageSize > 200 {
+	if cfg.PageSize <= 0 || cfg.PageSize > 200 {
 		cfg.PageSize = 200
 	}
 	if cfg.Retryable == nil {
@@ -106,7 +118,23 @@ func Iter(e *transport.Executor, baseURL string, query url.Values, cfg paginatio
 			return !errors.As(err, &re) || re.StatusCode >= 500
 		}
 	}
+	var (
+		done  bool
+		pages int
+		seen  = map[string]struct{}{}
+	)
 	return pagination.New(cfg, func(ctx context.Context, offset, limit int) ([]models.Risk, error) {
+		if done {
+			return nil, nil
+		}
+		if pages >= MaxPages {
+			return nil, &cxerrors.ResponseError{
+				Method: http.MethodGet, URL: redact.URL(transport.JoinURL(baseURL, RisksPath)),
+				StatusCode: http.StatusOK,
+				Reason:     "risks listing exceeded max pages (" + strconv.Itoa(MaxPages) + "); server is not honouring offset/limit",
+			}
+		}
+		pages++
 		q := make(url.Values, len(query)+2)
 		for k, vs := range query {
 			q[k] = append([]string(nil), vs...)
@@ -117,6 +145,31 @@ func Iter(e *transport.Executor, baseURL string, query url.Values, cfg paginatio
 		if err != nil {
 			return nil, err
 		}
-		return page.Risks, nil
+		n := len(page.Risks)
+		total := page.MetaData.FilteredResults
+		if total == 0 && n > 0 {
+			total = page.MetaData.TotalResults
+		}
+		if n == 0 || n < limit || (total > 0 && offset+n >= total) {
+			done = true
+		}
+		// Stall guard: keep only risks not seen before; a page of nothing new
+		// means the server is repeating itself.
+		fresh := page.Risks[:0:0]
+		for _, r := range page.Risks {
+			if r.ID == "" {
+				fresh = append(fresh, r)
+				continue
+			}
+			if _, dup := seen[r.ID]; dup {
+				continue
+			}
+			seen[r.ID] = struct{}{}
+			fresh = append(fresh, r)
+		}
+		if len(fresh) == 0 {
+			done = true
+		}
+		return fresh, nil
 	})
 }

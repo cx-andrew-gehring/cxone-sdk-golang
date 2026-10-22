@@ -96,3 +96,101 @@ func TestIterEmpty(t *testing.T) {
 		t.Errorf("got %v %v", all, err)
 	}
 }
+
+// ignoringServer ignores offset and always returns the same first page.
+func ignoringServer(total, page int, reqs *int) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		*reqs++
+		if *reqs > 50 {
+			http.Error(w, "runaway", 500)
+			return
+		}
+		body := fmt.Sprintf(`{"metaData":{"totalResults":%d,"filteredResults":%d},"risks":[`, total, total)
+		for i := 0; i < page; i++ {
+			if i > 0 {
+				body += ","
+			}
+			body += fmt.Sprintf(`{"id":"r%d","groupId":"g%d"}`, i, i)
+		}
+		_, _ = io.WriteString(w, body+"]}")
+	}
+}
+
+func TestIterOffsetIgnoringServerTerminates(t *testing.T) {
+	reqs := 0
+	// total says 1000 but the server keeps returning the same 200: stall guard must stop.
+	exec, base := newExec(t, ignoringServer(1000, 200, &reqs))
+	it := risks.Iter(exec, base, url.Values{"projectId": {"p"}}, pagination.Config{PageRetryDelay: pagination.NoRetryDelay})
+	all, err := pagination.Collect(context.Background(), it)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 200 || reqs != 2 {
+		t.Errorf("items=%d reqs=%d", len(all), reqs)
+	}
+}
+
+func TestIterStopsAtFilteredTotalExactMultiple(t *testing.T) {
+	reqs := 0
+	h := pagedServer(t, 400)
+	exec, base := newExec(t, func(w http.ResponseWriter, r *http.Request) {
+		reqs++
+		rec := httptest.NewRecorder()
+		h(rec, r)
+		b := rec.Body.String()
+		// inject metadata: filteredResults=400 (totalResults larger, must be ignored)
+		b = `{"metaData":{"totalResults":9999,"filteredResults":400},` + b[1:]
+		_, _ = io.WriteString(w, b)
+	})
+	it := risks.Iter(exec, base, url.Values{"projectId": {"p"}}, pagination.Config{PageRetryDelay: pagination.NoRetryDelay})
+	all, err := pagination.Collect(context.Background(), it)
+	if err != nil || len(all) != 400 {
+		t.Fatalf("got %d %v", len(all), err)
+	}
+	if reqs != 2 {
+		t.Errorf("want exactly 2 requests (no empty trailing page), got %d", reqs)
+	}
+}
+
+func TestIterStopsOnShortPageWithoutMetadata(t *testing.T) {
+	reqs := 0
+	h := pagedServer(t, 250)
+	exec, base := newExec(t, func(w http.ResponseWriter, r *http.Request) { reqs++; h(w, r) })
+	it := risks.Iter(exec, base, url.Values{"projectId": {"p"}}, pagination.Config{PageRetryDelay: pagination.NoRetryDelay})
+	all, _ := pagination.Collect(context.Background(), it)
+	if len(all) != 250 || reqs != 2 {
+		t.Errorf("items=%d reqs=%d", len(all), reqs)
+	}
+}
+
+func TestIterDefaultPageSize200AndClamp(t *testing.T) {
+	for _, tc := range []struct{ in, want int }{{0, 200}, {500, 200}, {50, 50}} {
+		var lim string
+		exec, base := newExec(t, func(w http.ResponseWriter, r *http.Request) {
+			lim = r.URL.Query().Get("limit")
+			_, _ = io.WriteString(w, `{"risks":[]}`)
+		})
+		it := risks.Iter(exec, base, url.Values{"projectId": {"p"}}, pagination.Config{PageSize: tc.in, PageRetryDelay: pagination.NoRetryDelay})
+		_, _ = pagination.Collect(context.Background(), it)
+		if lim != strconv.Itoa(tc.want) {
+			t.Errorf("PageSize %d: limit=%q want %d", tc.in, lim, tc.want)
+		}
+	}
+}
+
+func TestIterMaxPagesCap(t *testing.T) {
+	// Every page has fresh ids and no metadata, full-size: only the cap stops it.
+	reqs := 0
+	exec, base := newExec(t, func(w http.ResponseWriter, r *http.Request) {
+		reqs++
+		_, _ = io.WriteString(w, fmt.Sprintf(`{"risks":[{"id":"a%d"},{"id":"b%d"}]}`, reqs, reqs))
+	})
+	it := risks.Iter(exec, base, url.Values{"projectId": {"p"}}, pagination.Config{PageSize: 2, PageRetryDelay: pagination.NoRetryDelay})
+	_, err := pagination.Collect(context.Background(), it)
+	if err == nil {
+		t.Fatal("want error at max pages")
+	}
+	if reqs != risks.MaxPages {
+		t.Errorf("reqs=%d want %d", reqs, risks.MaxPages)
+	}
+}

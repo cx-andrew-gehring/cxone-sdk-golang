@@ -800,13 +800,16 @@ func (h *RisksHandle) GroupIDs(ctx context.Context, projectID string, engines ..
 		q.Add("engine", e)
 	}
 	it := riskseps.Iter(h.executor, h.baseURL, q, pagination.Config{})
-	all, err := pagination.Collect(ctx, it)
-	if err != nil {
-		return nil, err
-	}
-	seen := make(map[string]struct{}, len(all))
-	ids := make([]string, 0, len(all))
-	for _, r := range all {
+	seen := make(map[string]struct{})
+	ids := make([]string, 0)
+	for {
+		r, ok, err := it.Next(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			break
+		}
 		if r.GroupID == "" {
 			continue
 		}

@@ -122,3 +122,22 @@ func TestAITriageHandle402IsTyped(t *testing.T) {
 		t.Errorf("got %v", err)
 	}
 }
+
+func TestRisksGroupIDsOffsetIgnoringServerTerminates(t *testing.T) {
+	calls := 0
+	c := clientAgainst(t, func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls > 50 {
+			http.Error(w, "runaway", 500)
+			return
+		}
+		_, _ = io.WriteString(w, `{"metaData":{"totalResults":999,"filteredResults":999},"risks":[{"id":"a","groupId":"g1"},{"id":"b","groupId":"g1"},{"id":"c","groupId":"g2"}]}`)
+	})
+	ids, err := c.Risks().GroupIDs(context.Background(), "p1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(ids, []string{"g1", "g2"}) || calls > 3 {
+		t.Errorf("ids=%v calls=%d", ids, calls)
+	}
+}
