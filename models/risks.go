@@ -92,3 +92,37 @@ type FilterParam struct {
 	Values   []string `json:"values"`
 	Operator string   `json:"operator"`
 }
+
+// Risk is one entry of GET /api/risks (RiskAPIModel, legacy risks endpoint).
+type Risk struct {
+	ID                 string `json:"id"`
+	RiskName           string `json:"riskName,omitempty"`
+	Status             string `json:"status,omitempty"`
+	State              string `json:"state,omitempty"`
+	Severity           string `json:"severity,omitempty"`
+	FirstDetectionDate string `json:"firstDetectionDate,omitempty"`
+	Origin             string `json:"origin,omitempty"`
+	Source             string `json:"source,omitempty"`
+	AssetName          string `json:"assetName,omitempty"`
+	SubAssetName       string `json:"subAssetName,omitempty"`
+	ProjectID          string `json:"projectId,omitempty"`
+	ScanID             string `json:"scanId,omitempty"`
+	Engine             string `json:"engine,omitempty"`
+	GroupID            string `json:"groupId,omitempty"`
+	AssetType          string `json:"assetType,omitempty"`
+	StateChangedBy     string `json:"stateChangedBy,omitempty"`
+}
+
+// RisksMetaData is the paging metadata of GET /api/risks.
+type RisksMetaData struct {
+	TotalResults    int `json:"totalResults"`
+	FilteredResults int `json:"filteredResults"`
+	Page            int `json:"page"`
+	PageSize        int `json:"pageSize"`
+}
+
+// RisksPage is the response of GET /api/risks.
+type RisksPage struct {
+	MetaData RisksMetaData `json:"metaData"`
+	Risks    []Risk        `json:"risks"`
+}

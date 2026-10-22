@@ -191,3 +191,41 @@ var (
 func (e *AuthError) Is(target error) bool          { return target == ErrAuth }
 func (e *CommunicationError) Is(target error) bool { return target == ErrCommunication }
 func (e *ResponseError) Is(target error) bool      { return target == ErrResponse }
+
+// TriageErrorKind classifies the documented AI Triage submit/retrieve
+// failures that callers commonly handle (ADR-010 fail-open policy).
+type TriageErrorKind string
+
+const (
+	// TriageSourceUnavailable is HTTP 400: the source code is no longer
+	// available, so triage cannot run.
+	TriageSourceUnavailable TriageErrorKind = "source_unavailable"
+	// TriageInsufficientCredits is HTTP 402: AI consumption credits exhausted.
+	TriageInsufficientCredits TriageErrorKind = "insufficient_credits"
+	// TriageForbidden is HTTP 403: feature not enabled or insufficient roles.
+	TriageForbidden TriageErrorKind = "forbidden"
+)
+
+// TriageError is returned by the AI Triage endpoints for HTTP 400, 402 and
+// 403. The originating *ResponseError is preserved and reachable through
+// errors.As. Message is redacted before construction.
+type TriageError struct {
+	Kind          TriageErrorKind
+	Method        string
+	URL           string
+	StatusCode    int
+	CorrelationID string
+	Message       string
+	Cause         error
+}
+
+func (e *TriageError) Error() string {
+	return fmt.Sprintf(
+		"cxone: ai triage %s: %s %s returned status %d (correlationId=%s): %s",
+		e.Kind, e.Method, e.URL, e.StatusCode, e.CorrelationID, e.Message,
+	)
+}
+
+func (e *TriageError) Unwrap() error { return e.Cause }
+
+var _ error = (*TriageError)(nil)

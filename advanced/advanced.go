@@ -44,6 +44,7 @@ import (
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/roles"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/results"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/risks"
+	aitriageep "github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/aitriage"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/sastmetadata"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/sastresults"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/scm"
@@ -153,6 +154,9 @@ func (h *Handle) ScanOverview() *ScanOverview { return &ScanOverview{h: h} }
 
 // Risks returns a typed handle to the Risk Management + APISec risks endpoints.
 func (h *Handle) Risks() *Risks { return &Risks{h: h} }
+
+// AITriage returns a typed handle to the AI Triage endpoints.
+func (h *Handle) AITriage() *AITriage { return &AITriage{h: h} }
 
 // Telemetry returns a typed handle to the AI telemetry endpoint.
 func (h *Handle) Telemetry() *Telemetry { return &Telemetry{h: h} }
@@ -666,6 +670,31 @@ func (r *Risks) GetAPISecOverview(ctx context.Context, scanID string) (*models.A
 }
 func (r *Risks) ListAPISecRisks(ctx context.Context, query url.Values) (*models.APISecPaginatedResult, error) {
 	return risks.ListAPISecRisks(ctx, r.h.executor, r.h.rootURL, query)
+}
+
+// ListRisks returns one page of GET /api/risks (projectId, engine, limit, offset).
+func (r *Risks) ListRisks(ctx context.Context, query url.Values) (*models.RisksPage, error) {
+	return risks.ListRisks(ctx, r.h.executor, r.h.rootURL, query)
+}
+
+// IterRisks returns an item iterator over every risk matching query.
+func (r *Risks) IterRisks(query url.Values, cfg pagination.Config) *pagination.Iterator[models.Risk] {
+	return risks.Iter(r.h.executor, r.h.rootURL, query, cfg)
+}
+
+// ----- AI Triage -------------------------------------------------------------
+
+// AITriage wraps the AI Triage endpoints.
+type AITriage struct{ h *Handle }
+
+// Submit calls POST /api/ai-triage/triage.
+func (a *AITriage) Submit(ctx context.Context, in *models.TriageRequest) (*models.TriageAccepted, error) {
+	return aitriageep.Submit(ctx, a.h.executor, a.h.rootURL, in)
+}
+
+// GetResult calls GET /api/ai-triage/triage/{project_id}/{group_id}.
+func (a *AITriage) GetResult(ctx context.Context, projectID, groupID string) (*models.TriageResultEnvelope, error) {
+	return aitriageep.GetResult(ctx, a.h.executor, a.h.rootURL, projectID, groupID)
 }
 
 // ----- Telemetry -------------------------------------------------------------
