@@ -13,11 +13,13 @@ import (
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/advanced"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/auth"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/cxerrors"
+	riskseps "github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/risks"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/retry"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/transport"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/models"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/observability"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/pagination"
+	wfaitriage "github.com/checkmarx-open-labs/cxone-sdk-golang/workflows/aitriage"
 	wfaudit "github.com/checkmarx-open-labs/cxone-sdk-golang/workflows/audit"
 	wfclients "github.com/checkmarx-open-labs/cxone-sdk-golang/workflows/clients"
 	wfgroups "github.com/checkmarx-open-labs/cxone-sdk-golang/workflows/groups"
@@ -748,6 +750,73 @@ func (h *SCMHandle) Disconnect(ctx context.Context, projectID string) error {
 // [wfscm.ConversionInspector]. Process data is retained for 7 days.
 func (h *SCMHandle) GetConversion(ctx context.Context, processID string) (*wfscm.ConversionInspector, error) {
 	return wfscm.FromProcessID(ctx, h.backend, processID)
+}
+
+// AITriage returns the high-level AI Triage workflow handle.
+func (c *Client) AITriage() *AITriageHandle {
+	return &AITriageHandle{
+		backend: &wfaitriage.Backend{Executor: c.executor, BaseURL: c.rootURL()},
+	}
+}
+
+// AITriageHandle wraps the AI Triage workflow.
+type AITriageHandle struct {
+	backend *wfaitriage.Backend
+}
+
+// Submit requests AI triage of buckets for scanID. A response with
+// Published=false (identical job already exists) is a success. HTTP 400, 402
+// and 403 are returned as *cxerrors.TriageError.
+func (h *AITriageHandle) Submit(ctx context.Context, scanID string, buckets ...models.TriageBucket) (*models.TriageAccepted, error) {
+	return wfaitriage.Submit(ctx, h.backend, scanID, buckets...)
+}
+
+// Result fetches the triage state for one vulnerability group (use the
+// groupId from [RisksHandle.GroupIDs]).
+func (h *AITriageHandle) Result(ctx context.Context, projectID, groupID string) (*wfaitriage.ResultInspector, error) {
+	return wfaitriage.GetResult(ctx, h.backend, projectID, groupID)
+}
+
+// Risks returns the high-level risks handle (GET /api/risks).
+func (c *Client) Risks() *RisksHandle {
+	return &RisksHandle{executor: c.executor, baseURL: c.rootURL()}
+}
+
+// RisksHandle wraps the project risks listing.
+type RisksHandle struct {
+	executor *transport.Executor
+	baseURL  string
+}
+
+// GroupIDs pages through GET /api/risks for projectID (optionally filtered to
+// engines, e.g. "SAST", "SCA") and returns the unique groupId values in
+// first-seen order. Risks without a groupId are skipped.
+func (h *RisksHandle) GroupIDs(ctx context.Context, projectID string, engines ...string) ([]string, error) {
+	if projectID == "" {
+		return nil, &cxerrors.ConfigurationError{Field: "projectID", Reason: "is required"}
+	}
+	q := url.Values{"projectId": {projectID}}
+	for _, e := range engines {
+		q.Add("engine", e)
+	}
+	it := riskseps.Iter(h.executor, h.baseURL, q, pagination.Config{})
+	all, err := pagination.Collect(ctx, it)
+	if err != nil {
+		return nil, err
+	}
+	seen := make(map[string]struct{}, len(all))
+	ids := make([]string, 0, len(all))
+	for _, r := range all {
+		if r.GroupID == "" {
+			continue
+		}
+		if _, dup := seen[r.GroupID]; dup {
+			continue
+		}
+		seen[r.GroupID] = struct{}{}
+		ids = append(ids, r.GroupID)
+	}
+	return ids, nil
 }
 
 // Advanced returns a typed handle to the SDK's low-level endpoint layer.
