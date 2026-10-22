@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -158,5 +159,65 @@ func TestPutFileValidatesArgs(t *testing.T) {
 				t.Fatalf("expected *ConfigurationError, got %T: %v", err, err)
 			}
 		})
+	}
+}
+
+const secretSig = "SECRETSIG123"
+
+func assertNoSecret(t *testing.T, err error) {
+	t.Helper()
+	for _, s := range []string{err.Error(), fmt.Sprintf("%+v", err), fmt.Sprintf("%#v", err), fmt.Sprintf("%v", errors.Unwrap(err))} {
+		if strings.Contains(s, secretSig) {
+			t.Errorf("presigned signature leaked: %s", s)
+		}
+	}
+	var ce *cxerrors.CommunicationError
+	if errors.As(err, &ce) {
+		if strings.Contains(ce.URL, secretSig) || strings.Contains(ce.URL, "?") {
+			t.Errorf("CommunicationError.URL not sanitized: %q", ce.URL)
+		}
+		if ce.Cause != nil {
+			if s := fmt.Sprintf("%v %+v %#v", ce.Cause, ce.Cause, ce.Cause); strings.Contains(s, secretSig) {
+				t.Errorf("cause leaks signature: %s", s)
+			}
+		}
+	}
+}
+
+func TestPutFile403DoesNotLeakSignature(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer srv.Close()
+	err := uploads.PutFile(context.Background(), srv.Client(), srv.URL+"/b/obj?X-Amz-Signature="+secretSig, bytes.NewReader([]byte("x")), 1)
+	if err == nil {
+		t.Fatal("want error")
+	}
+	assertNoSecret(t, err)
+}
+
+func TestPutFileTransportErrorDoesNotLeakSignature(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	u := srv.URL + "/b/obj?X-Amz-Signature=" + secretSig
+	client := srv.Client()
+	srv.Close() // connection refused
+	err := uploads.PutFile(context.Background(), client, u, bytes.NewReader([]byte("x")), 1)
+	if err == nil {
+		t.Fatal("want error")
+	}
+	assertNoSecret(t, err)
+	if !errors.Is(err, cxerrors.ErrCommunication) {
+		t.Errorf("not a CommunicationError: %v", err)
+	}
+}
+
+func TestPutFileBuildRequestErrorDoesNotLeakSignature(t *testing.T) {
+	err := uploads.PutFile(context.Background(), http.DefaultClient, "http://user:pw"+secretSig+"@exa mple.com/x?sig="+secretSig, bytes.NewReader([]byte("x")), 1)
+	if err == nil {
+		t.Fatal("want error")
+	}
+	assertNoSecret(t, err)
+	if strings.Contains(err.Error(), "pw"+secretSig) {
+		t.Errorf("userinfo leaked: %v", err)
 	}
 }

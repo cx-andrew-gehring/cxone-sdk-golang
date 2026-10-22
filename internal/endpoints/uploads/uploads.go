@@ -19,9 +19,12 @@ package uploads
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/cxerrors"
@@ -83,11 +86,12 @@ func PutFile(ctx context.Context, httpClient *http.Client, presignedURL string, 
 		return &cxerrors.ConfigurationError{Field: "size", Reason: "must be > 0 (object stores require Content-Length)"}
 	}
 
+	safeURL := sanitizeURL(presignedURL)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPut, presignedURL, body)
 	if err != nil {
 		return &cxerrors.CommunicationError{
-			Method: http.MethodPut, URL: presignedURL, Attempt: 1,
-			Cause: fmt.Errorf("build upload request: %w", err),
+			Method: http.MethodPut, URL: safeURL, Attempt: 1,
+			Cause: fmt.Errorf("build upload request: %w", scrubCause(err, presignedURL, safeURL)),
 		}
 	}
 	req.ContentLength = size
@@ -96,8 +100,8 @@ func PutFile(ctx context.Context, httpClient *http.Client, presignedURL string, 
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return &cxerrors.CommunicationError{
-			Method: http.MethodPut, URL: presignedURL, Attempt: 1,
-			Cause: err,
+			Method: http.MethodPut, URL: safeURL, Attempt: 1,
+			Cause: scrubCause(err, presignedURL, safeURL),
 		}
 	}
 	defer resp.Body.Close()
@@ -108,12 +112,45 @@ func PutFile(ctx context.Context, httpClient *http.Client, presignedURL string, 
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
 		return &cxerrors.CommunicationError{
 			Method:     http.MethodPut,
-			URL:        presignedURL,
+			URL:        safeURL,
 			StatusCode: resp.StatusCode,
 			Attempt:    1,
 		}
 	}
 	return nil
+}
+
+// sanitizeURL strips the query string, fragment and userinfo from a presigned
+// URL: they carry the signature/credentials and must never reach an error
+// message or log. An unparseable URL is replaced by a placeholder.
+func sanitizeURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "<invalid presigned url>"
+	}
+	u.User = nil
+	u.RawQuery = ""
+	u.ForceQuery = false
+	u.Fragment = ""
+	u.RawFragment = ""
+	return u.String()
+}
+
+// scrubCause unwraps a *url.Error (whose Error() embeds the full request URL,
+// signature included) to its inner cause and replaces any remaining
+// occurrence of the raw URL in the message with the sanitized one.
+func scrubCause(err error, raw, safe string) error {
+	var ue *url.Error
+	if errors.As(err, &ue) {
+		err = ue.Err
+	}
+	if err == nil {
+		return nil
+	}
+	if msg := err.Error(); strings.Contains(msg, raw) {
+		return errors.New(strings.ReplaceAll(msg, raw, safe))
+	}
+	return err
 }
 
 // PutFileWithTimeout is [PutFile] with its own deadline d that is NOT capped

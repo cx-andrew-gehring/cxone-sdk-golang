@@ -16,6 +16,7 @@ package cxerrors
 import (
 	"errors"
 	"fmt"
+	"net/url"
 )
 
 // EndpointError is raised when the region or endpoint configuration is
@@ -68,16 +69,28 @@ type CommunicationError struct {
 }
 
 func (e *CommunicationError) Error() string {
+	u := redactURL(e.URL)
 	if e.StatusCode != 0 {
 		return fmt.Sprintf(
 			"cxone: %s %s failed after %d attempt(s) with status %d (correlationId=%s)",
-			e.Method, e.URL, e.Attempt, e.StatusCode, e.CorrelationID,
+			e.Method, u, e.Attempt, e.StatusCode, e.CorrelationID,
 		)
 	}
 	return fmt.Sprintf(
 		"cxone: %s %s failed after %d attempt(s) (correlationId=%s): %v",
-		e.Method, e.URL, e.Attempt, e.CorrelationID, e.Cause,
+		e.Method, u, e.Attempt, e.CorrelationID, e.Cause,
 	)
+}
+
+// redactURL drops the query string, fragment and userinfo (presigned-URL
+// signatures, credentials) from a URL before it is printed.
+func redactURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "<invalid url>"
+	}
+	u.User, u.RawQuery, u.ForceQuery, u.Fragment, u.RawFragment = nil, "", false, "", ""
+	return u.String()
 }
 
 func (e *CommunicationError) Unwrap() error { return e.Cause }
