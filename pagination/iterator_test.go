@@ -94,8 +94,8 @@ func TestIteratorOffsetByCountIncrementsCorrectly(t *testing.T) {
 	if _, err := pagination.Collect(context.Background(), it); err != nil {
 		t.Fatal(err)
 	}
-	want := []int{0, 5, 10}
-	if len(seenOffsets) != 3 || seenOffsets[0] != want[0] || seenOffsets[1] != want[1] || seenOffsets[2] != want[2] {
+	want := []int{0, 5} // short second page ends the stream: no third request
+	if len(seenOffsets) != 2 || seenOffsets[0] != want[0] || seenOffsets[1] != want[1] {
 		t.Errorf("offsets = %v, want %v", seenOffsets, want)
 	}
 }
@@ -126,7 +126,7 @@ func TestIteratorOffsetByPageNumberIncrementsCorrectly(t *testing.T) {
 	if len(got) != 5 {
 		t.Errorf("got %v", got)
 	}
-	want := []int{0, 1, 2, 3}
+	want := []int{0, 1, 2} // short last page ends the stream
 	if len(seenOffsets) != len(want) {
 		t.Fatalf("offsets = %v, want %v", seenOffsets, want)
 	}
@@ -265,8 +265,8 @@ func TestIteratorRangeOverFuncStopsOnBreak(t *testing.T) {
 }
 
 func TestCollectDrainsEverything(t *testing.T) {
-	pages := [][]int{{1, 2}, {3, 4, 5}, {}}
-	it := pagination.New(pagination.Config{PageSize: 5, OffsetIsByCount: true}, pageFetcher(pages))
+	pages := [][]int{{1, 2, 3}, {4, 5}}
+	it := pagination.New(pagination.Config{PageSize: 3, OffsetIsByCount: true}, pageFetcher(pages))
 	all, err := pagination.Collect(context.Background(), it)
 	if err != nil {
 		t.Fatal(err)
@@ -298,7 +298,7 @@ func TestOffsetModeOverridesOffsetIsByCount(t *testing.T) {
 			if len(offsets) >= 3 {
 				return nil, nil
 			}
-			return []int{1}, nil
+			return make([]int, 50), nil
 		}
 		if _, err := pagination.Collect(context.Background(), pagination.New(cfg, fetch)); err != nil {
 			t.Fatal(err)

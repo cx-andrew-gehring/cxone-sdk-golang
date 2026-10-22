@@ -46,7 +46,9 @@ package pagination
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
+	"fmt"
 	"iter"
 	"time"
 )
@@ -60,7 +62,9 @@ import (
 // returning the array of items contained in the response.
 //
 // Returning a nil or empty slice signals end-of-stream — the iterator stops
-// after the first empty page (CLAUDE.md §10.1).
+// after the first empty page (CLAUDE.md §10.1). A page shorter than the
+// requested limit is also treated as the final page, and an endpoint-supplied
+// total ([Options.Total]) stops iteration once it has been consumed.
 //
 // Returning an error halts the iterator unless it is classified as transient
 // (see [Config.Retryable]); transient errors are retried up to
@@ -119,6 +123,39 @@ type Config struct {
 	// funnel itself has already classified its own errors before they
 	// reach here.
 	Retryable func(error) bool
+
+	// MaxPages is a hard safety cap on the number of pages fetched by one
+	// iterator; exceeding it yields [ErrMaxPagesExceeded]. It protects
+	// against a misbehaving upstream that never ends. Default
+	// [DefaultMaxPages] (100000).
+	MaxPages int
+}
+
+// DefaultMaxPages is the default [Config.MaxPages].
+const DefaultMaxPages = 100000
+
+// ErrPaginationStalled is returned when two consecutive pages are identical
+// (by [Options.Key]), which means the upstream is ignoring the offset and
+// iteration would never terminate.
+var ErrPaginationStalled = errors.New("pagination: upstream returned an identical page twice (offset ignored?); stopping")
+
+// ErrMaxPagesExceeded is returned when [Config.MaxPages] pages were fetched
+// without reaching the end of the stream.
+var ErrMaxPagesExceeded = errors.New("pagination: max pages exceeded")
+
+// Options carries optional, item-typed termination hints for
+// [NewWithOptions].
+type Options[T any] struct {
+	// Total, if non-nil, reports the upstream's total item count as seen in
+	// the most recently fetched page (ok=false when unknown). Iteration stops
+	// once the number of items consumed, counted from item offset 0 and
+	// accounting for Pages vs Items offset mode, reaches the total.
+	Total func() (total int, ok bool)
+
+	// Key, if non-nil, returns an identity string for an item. Two
+	// consecutive pages with identical key sequences abort iteration with
+	// [ErrPaginationStalled].
+	Key func(T) string
 }
 
 // NoRetryDelay disables the inter-attempt sleep on per-page retries.
@@ -130,6 +167,9 @@ const NoRetryDelay time.Duration = -1
 func (c Config) withDefaults() Config {
 	if c.PageSize == 0 {
 		c.PageSize = 100
+	}
+	if c.MaxPages == 0 {
+		c.MaxPages = DefaultMaxPages
 	}
 	if c.PageRetriesMax == 0 {
 		c.PageRetriesMax = 5
@@ -156,6 +196,11 @@ func (c Config) withDefaults() Config {
 type Iterator[T any] struct {
 	cfg   Config
 	fetch PageFetcher[T]
+	opts  Options[T]
+
+	pagesFetched int
+	prevKey      string
+	havePrevKey  bool
 
 	// Page state.
 	offset    int
@@ -169,10 +214,18 @@ type Iterator[T any] struct {
 // config. The iterator is ready to use immediately; the first call to
 // [Iterator.Next] triggers the first page fetch.
 func New[T any](cfg Config, fetch PageFetcher[T]) *Iterator[T] {
+	return NewWithOptions(cfg, fetch, Options[T]{})
+}
+
+// NewWithOptions is [New] with optional total/identity hints that let the
+// iterator terminate without an extra empty-page request and detect an
+// upstream that ignores the offset.
+func NewWithOptions[T any](cfg Config, fetch PageFetcher[T], opts Options[T]) *Iterator[T] {
 	cfg = cfg.withDefaults()
 	return &Iterator[T]{
 		cfg:    cfg,
 		fetch:  fetch,
+		opts:   opts,
 		offset: cfg.OffsetInitValue,
 	}
 }
@@ -213,6 +266,9 @@ func (it *Iterator[T]) fetchNextPage(ctx context.Context) error {
 	if it.exhausted {
 		return nil
 	}
+	if it.pagesFetched >= it.cfg.MaxPages {
+		return ErrMaxPagesExceeded
+	}
 	maxAttempts := it.cfg.PageRetriesMax + 1 // PageRetriesMax is retries on top of attempt 1
 	var lastErr error
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
@@ -221,6 +277,10 @@ func (it *Iterator[T]) fetchNextPage(ctx context.Context) error {
 		}
 		items, err := it.fetch(ctx, it.offset, it.cfg.PageSize)
 		if err == nil {
+			it.pagesFetched++
+			if err := it.checkStall(items); err != nil {
+				return err
+			}
 			it.buffer = items
 			it.advanceOffset(len(items))
 			return nil
@@ -242,26 +302,59 @@ func (it *Iterator[T]) fetchNextPage(ctx context.Context) error {
 	return lastErr
 }
 
-// advanceOffset increments the iterator's offset for the next page,
-// honoring OffsetIsByCount.
-func (it *Iterator[T]) advanceOffset(pageLen int) {
-	byCount := it.cfg.OffsetIsByCount
+// checkStall errors when items repeats the previous page (by Options.Key).
+func (it *Iterator[T]) checkStall(items []T) error {
+	if it.opts.Key == nil || len(items) == 0 {
+		return nil
+	}
+	h := sha256.New()
+	for _, x := range items {
+		k := it.opts.Key(x)
+		_, _ = fmt.Fprintf(h, "%d:%s|", len(k), k)
+	}
+	key := string(h.Sum(nil))
+	if it.havePrevKey && key == it.prevKey {
+		return ErrPaginationStalled
+	}
+	it.prevKey, it.havePrevKey = key, true
+	return nil
+}
+
+func (it *Iterator[T]) byCount() bool {
 	switch it.cfg.OffsetMode {
 	case OffsetModePages:
-		byCount = false
+		return false
 	case OffsetModeItems:
-		byCount = true
+		return true
 	}
+	return it.cfg.OffsetIsByCount
+}
+
+// advanceOffset increments the iterator's offset for the next page and marks
+// the stream exhausted when this page was short or the upstream total has
+// been consumed.
+func (it *Iterator[T]) advanceOffset(pageLen int) {
+	byCount := it.byCount()
 	if byCount {
 		it.offset += it.cfg.PageSize
 	} else {
 		it.offset++
 	}
-	// If the page returned fewer items than PageSize, the next fetch is
-	// likely to return empty — but we don't optimize that away because the
-	// upstream might be paginating differently than expected. Always make
-	// the canonical "is there another page?" call.
-	_ = pageLen
+	if pageLen < it.cfg.PageSize {
+		it.exhausted = true
+		return
+	}
+	if it.opts.Total != nil {
+		if total, ok := it.opts.Total(); ok {
+			consumed := it.offset // items mode: offset is already in items
+			if !byCount {
+				consumed = it.offset * it.cfg.PageSize
+			}
+			if consumed >= total {
+				it.exhausted = true
+			}
+		}
+	}
 }
 
 // All returns a Go 1.23 range-over-func sequence so callers can iterate with
