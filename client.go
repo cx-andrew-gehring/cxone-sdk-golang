@@ -15,12 +15,9 @@ import (
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/advanced"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/auth"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/cxerrors"
-<<<<<<< HEAD
 	projectsep "github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/projects"
 	scansep "github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/scans"
-=======
 	riskseps "github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/risks"
->>>>>>> ws/sdk-b
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/retry"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/transport"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/models"
