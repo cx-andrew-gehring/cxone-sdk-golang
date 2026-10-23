@@ -11,6 +11,7 @@ import (
 	"math/rand"
 	"net"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -112,6 +113,49 @@ const (
 	OutcomeFatal
 )
 
+// UnknownOutcomeError is returned by Do when fn reports an Outcome value Do
+// does not know and no error of its own. An unknown outcome is fatal.
+type UnknownOutcomeError struct {
+	Outcome Outcome
+}
+
+func (e *UnknownOutcomeError) Error() string {
+	return "retry: unknown outcome " + strconv.Itoa(int(e.Outcome))
+}
+
+// WithDelay wraps err so that, when fn returns (OutcomeRetry, WithDelay(err, d))
+// and d > 0, Do waits d before the next attempt instead of the policy backoff
+// (used for a server-supplied Retry-After). Do never returns the wrapper: the
+// error it reports is err itself. A non-positive d leaves the policy backoff.
+func WithDelay(err error, d time.Duration) error {
+	return &delayHint{err: err, delay: d}
+}
+
+// delayHint carries a WithDelay hint from fn to Do. It is unwrapped by Do and
+// never escapes it.
+type delayHint struct {
+	err   error
+	delay time.Duration
+}
+
+func (h *delayHint) Error() string {
+	if h.err == nil {
+		return "retry: delayed retry"
+	}
+	return h.err.Error()
+}
+
+func (h *delayHint) Unwrap() error { return h.err }
+
+// splitHint returns err without a top-level WithDelay wrapper and the hinted
+// delay (0 when there is none).
+func splitHint(err error) (error, time.Duration) {
+	if h, ok := err.(*delayHint); ok { //nolint:errorlint // only Do's own top-level wrapper
+		return h.err, h.delay
+	}
+	return err, 0
+}
+
 // ClassifyStatus returns the retry verdict for an HTTP status code per
 // CLAUDE.md §4.4. 401 is intentionally NOT classified as a retry here — the
 // funnel handles 401 separately (refresh + one-shot retry off the budget).
@@ -201,8 +245,10 @@ func Sleep(ctx context.Context, d time.Duration) error {
 //
 // fn returns (Outcome, error). On OutcomeSuccess Do returns (attempt, nil).
 // On OutcomeFatal Do returns (attempt, fn's error). On OutcomeRetry Do
-// sleeps and tries again, up to MaxAttempts. After exhaustion Do returns
-// (MaxAttempts, the last error).
+// sleeps and tries again, up to MaxAttempts; the sleep is the policy backoff,
+// or the delay of a [WithDelay] hint when fn supplied one. After exhaustion Do
+// returns (MaxAttempts, the last error). Any other Outcome value is fatal:
+// Do returns (attempt, fn's error), or an *UnknownOutcomeError if that is nil.
 //
 // Cancellation is checked before each attempt and during the inter-attempt
 // sleep; ctx.Err() is returned immediately if observed.
@@ -216,6 +262,7 @@ func Do(ctx context.Context, p Policy, fn func(attempt int) (Outcome, error)) (i
 			return attempt, err
 		}
 		outcome, err := fn(attempt)
+		err, hint := splitHint(err)
 		switch outcome {
 		case OutcomeSuccess:
 			return attempt, nil
@@ -226,9 +273,19 @@ func Do(ctx context.Context, p Policy, fn func(attempt int) (Outcome, error)) (i
 			if attempt == p.MaxAttempts {
 				return attempt, lastErr
 			}
-			if sleepErr := Sleep(ctx, p.nextDelay(attempt)); sleepErr != nil {
+			delay := p.nextDelay(attempt)
+			if hint > 0 {
+				delay = hint
+			}
+			if sleepErr := Sleep(ctx, delay); sleepErr != nil {
 				return attempt, sleepErr
 			}
+		default:
+			// An outcome Do does not know is fatal: never loop on it.
+			if err == nil {
+				err = &UnknownOutcomeError{Outcome: outcome}
+			}
+			return attempt, err
 		}
 	}
 	return p.MaxAttempts, lastErr
