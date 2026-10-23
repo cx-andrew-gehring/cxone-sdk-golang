@@ -10,10 +10,10 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/risks"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/retry"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/transport"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/pagination"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/internal/endpoints/risks"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/internal/retry"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/internal/transport"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/pagination"
 )
 
 type stubAuth struct{}

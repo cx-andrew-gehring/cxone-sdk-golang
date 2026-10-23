@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/cxerrors"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/cxerrors"
 )
 
 // GraphQLRequest is one GraphQL query payload.

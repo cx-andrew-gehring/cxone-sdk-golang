@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/models"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/models"
 )
 
 func TestAdvancedAITriageAndListRisks(t *testing.T) {

@@ -49,7 +49,7 @@ Use `errors.As` with the SDK error catalog:
 - **GetOrCreate**: `client.Users().GetOrCreateByEmail(ctx, template)`, `client.Projects().GetOrCreateByName(ctx, template)`
 
 ### Models
-Import from `github.com/checkmarx-open-labs/cxone-sdk-golang/models`. All types are strongly-typed structs. Unknown response fields are tolerated for forward compatibility.
+Import from `github.com/cx-andrew-gehring/cxone-sdk-golang/models`. All types are strongly-typed structs. Unknown response fields are tolerated for forward compatibility.
 
 ### Observability
 Wire via builder: `.Logger(l).Metrics(m).Tracer(t)`. Defaults are no-ops. Structured events emitted automatically.

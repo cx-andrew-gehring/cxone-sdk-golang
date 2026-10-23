@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/cxerrors"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/workflows/scans"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/cxerrors"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/workflows/scans"
 )
 
 func TestWaitUntilCompleteHappyPath(t *testing.T) {

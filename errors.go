@@ -1,6 +1,6 @@
 package cxone
 
-import "github.com/checkmarx-open-labs/cxone-sdk-golang/cxerrors"
+import "github.com/cx-andrew-gehring/cxone-sdk-golang/cxerrors"
 
 // The SDK's typed error catalog. These are aliases of the canonical types
 // declared in the cxerrors subpackage so callers can use errors.As against

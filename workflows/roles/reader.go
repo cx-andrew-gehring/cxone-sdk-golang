@@ -4,9 +4,9 @@ import (
 	"context"
 	"sync"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/cxerrors"
-	endpoints "github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/roles"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/models"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/cxerrors"
+	endpoints "github.com/cx-andrew-gehring/cxone-sdk-golang/internal/endpoints/roles"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/models"
 )
 
 // RoleReader is a two-level cached view of the tenant's role catalog.

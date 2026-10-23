@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
-	cxone "github.com/checkmarx-open-labs/cxone-sdk-golang"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/models"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/workflows/reports"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/workflows/scans"
+	cxone "github.com/cx-andrew-gehring/cxone-sdk-golang"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/models"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/workflows/reports"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/workflows/scans"
 )
 
 // newWorkflowClient builds a real cxone.Client backed by an httptest mux

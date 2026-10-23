@@ -3,9 +3,9 @@ package migration
 import (
 	"context"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/cxerrors"
-	endpoints "github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/migration"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/models"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/cxerrors"
+	endpoints "github.com/cx-andrew-gehring/cxone-sdk-golang/internal/endpoints/migration"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/models"
 )
 
 // ImportInspector wraps a [models.DataImport] with typed terminal-state

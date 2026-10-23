@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/transport"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/models"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/internal/transport"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/models"
 )
 
 // GetConfiguration returns the scan-level configuration for a project+scan.

@@ -1,6 +1,6 @@
 package users
 
-import "github.com/checkmarx-open-labs/cxone-sdk-golang/internal/transport"
+import "github.com/cx-andrew-gehring/cxone-sdk-golang/internal/transport"
 
 // Backend bundles the dependencies the user workflow needs to call the
 // underlying endpoint package. IAM endpoints target the Keycloak admin

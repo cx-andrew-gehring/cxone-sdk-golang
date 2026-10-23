@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/workflows/aitriage"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/workflows/aitriage"
 )
 
 // CONFIRMED is returned by the live service (S1 policy run) although the

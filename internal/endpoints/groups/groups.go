@@ -17,9 +17,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/cxerrors"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/transport"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/models"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/cxerrors"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/internal/transport"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/models"
 )
 
 // PathTemplate is the relative path with the tenant placeholder. The literal

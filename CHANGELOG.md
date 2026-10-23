@@ -1,8 +1,19 @@
 # Changelog
 
-## Unreleased
+## v0.10.1 (2026-10-23)
 
-Changes since `00d52c7`.
+### Changed (breaking: import path)
+- The module path is now `github.com/cx-andrew-gehring/cxone-sdk-golang`, the
+  repository it is published from (it was `github.com/checkmarx-open-labs/cxone-sdk-golang`,
+  which is not reachable). Update imports and `go get github.com/cx-andrew-gehring/cxone-sdk-golang@v0.10.1`;
+  a `replace` directive is no longer needed. The API is unchanged from v0.10.0.
+- `Version` is `0.10.1` (v0.10.0 still reported `0.9.0`, which also appeared in the
+  `User-Agent`).
+- The template project and its setup scripts use the new path and owner.
+
+## v0.10.0 (2026-10-23)
+
+Changes since `00d52c7`. v0.10.0 still declared the old module path; use v0.10.1.
 
 ### Fixed
 - uploads: the presigned-URL PUT now sends `Authorization: Bearer <token>`

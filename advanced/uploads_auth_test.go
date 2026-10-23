@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang"
 )
 
 // Storage fronted by the API host: POST /api/uploads returns a URL on the

@@ -63,4 +63,4 @@ if errors.As(err, &commErr) {
 
 ## Models
 
-All typed request/response structs live in `github.com/checkmarx-open-labs/cxone-sdk-golang/models`. Unknown fields are tolerated for forward compatibility.
+All typed request/response structs live in `github.com/cx-andrew-gehring/cxone-sdk-golang/models`. Unknown fields are tolerated for forward compatibility.

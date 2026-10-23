@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/cxerrors"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/models"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/cxerrors"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/models"
 )
 
 // DoStream is the binary-download counterpart to [DoJSON].

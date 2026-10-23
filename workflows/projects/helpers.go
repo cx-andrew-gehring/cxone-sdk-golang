@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/cxerrors"
-	endpoints "github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/projects"
-	appEndpoints "github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/applications"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/models"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/cxerrors"
+	endpoints "github.com/cx-andrew-gehring/cxone-sdk-golang/internal/endpoints/projects"
+	appEndpoints "github.com/cx-andrew-gehring/cxone-sdk-golang/internal/endpoints/applications"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/models"
 )
 
 // GetOrCreateByName returns the existing project whose name matches, or

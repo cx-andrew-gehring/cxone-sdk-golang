@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/cxerrors"
-	endpoints "github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/clients"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/models"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/cxerrors"
+	endpoints "github.com/cx-andrew-gehring/cxone-sdk-golang/internal/endpoints/clients"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/models"
 )
 
 // GetOrCreateByName returns the OIDC client whose clientId (display name)

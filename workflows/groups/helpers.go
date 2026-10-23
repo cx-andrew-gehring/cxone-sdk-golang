@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/cxerrors"
-	endpoints "github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/groups"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/models"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/cxerrors"
+	endpoints "github.com/cx-andrew-gehring/cxone-sdk-golang/internal/endpoints/groups"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/models"
 )
 
 // GetOrCreateByName returns the existing top-level group whose name matches,

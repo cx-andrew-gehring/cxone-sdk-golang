@@ -19,9 +19,9 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/cxerrors"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/transport"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/models"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/cxerrors"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/internal/transport"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/models"
 )
 
 // Path is the imports collection endpoint relative to the API host root.

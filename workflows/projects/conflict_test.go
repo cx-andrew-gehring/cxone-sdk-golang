@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/cxerrors"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/models"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/workflows/projects"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/cxerrors"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/models"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/workflows/projects"
 )
 
 // Body recorded on the canary (S5, 002-create-duplicate): HTTP 400, code 208.

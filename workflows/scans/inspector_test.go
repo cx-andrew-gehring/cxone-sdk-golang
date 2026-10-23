@@ -7,10 +7,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/retry"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/transport"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/models"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/workflows/scans"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/internal/retry"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/internal/transport"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/models"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/workflows/scans"
 )
 
 type stubAuth struct{}

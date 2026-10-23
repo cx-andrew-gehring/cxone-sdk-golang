@@ -5,8 +5,8 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/transport"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/models"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/internal/transport"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/models"
 )
 
 // Path is the relative path to the tenant configuration endpoint.

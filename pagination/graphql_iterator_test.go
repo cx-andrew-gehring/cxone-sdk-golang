@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/pagination"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/pagination"
 )
 
 // fakeGQL is a minimal in-memory GraphQLExecutor used by the iterator

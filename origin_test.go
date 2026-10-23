@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang"
 )
 
 func TestIsAPIOrigin(t *testing.T) {

@@ -12,8 +12,8 @@ import (
 	"log/slog"
 	"os"
 
-	cxone "github.com/checkmarx-open-labs/cxone-sdk-golang"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/observability"
+	cxone "github.com/cx-andrew-gehring/cxone-sdk-golang"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/observability"
 )
 
 func main() {

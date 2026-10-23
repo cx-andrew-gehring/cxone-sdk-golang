@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/pagination"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/pagination"
 )
 
 // pages models a fake upstream as a slice-of-slices: each inner slice is one

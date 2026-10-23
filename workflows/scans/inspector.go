@@ -10,17 +10,17 @@
 //     a configurable interval until the scan reaches a terminal state.
 //
 //   - [Invoker] — a fluent builder for starting a new scan against a
-//     [github.com/checkmarx-open-labs/cxone-sdk-golang/workflows/projects.ProjectRepoConfig].
+//     [github.com/cx-andrew-gehring/cxone-sdk-golang/workflows/projects.ProjectRepoConfig].
 package scans
 
 import (
 	"context"
 	"strings"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/cxerrors"
-	endpoints "github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/scans"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/transport"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/models"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/cxerrors"
+	endpoints "github.com/cx-andrew-gehring/cxone-sdk-golang/internal/endpoints/scans"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/internal/transport"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/models"
 )
 
 // Backend bundles the dependencies a scan workflow handle needs.
@@ -71,7 +71,7 @@ func FromScanID(ctx context.Context, backend *Backend, scanID string) (*ScanInsp
 
 // FromScanModel wraps an already-fetched scan response. No HTTP call is
 // issued. Use this when you already have the [models.ScanResponseModel] in
-// hand (e.g. from [github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/scans.Iter]).
+// hand (e.g. from [github.com/cx-andrew-gehring/cxone-sdk-golang/internal/endpoints/scans.Iter]).
 func FromScanModel(backend *Backend, scan *models.ScanResponseModel) (*ScanInspector, error) {
 	if backend == nil || backend.Executor == nil {
 		return nil, &cxerrors.ConfigurationError{Field: "backend", Reason: "is required"}

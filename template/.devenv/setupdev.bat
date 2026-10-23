@@ -52,7 +52,7 @@ SET "target=.goreleaser.yaml"
 REM Get the repository URL from the first argument, removing quotes
 SET "repoUrl=%~1"
 
-SET "gitowner=checkmarx-open-labs"
+SET "gitowner=cx-andrew-gehring"
 SET "gitrepo=%current_dir_name%"
 
 IF NOT "%repoUrl%"=="" (

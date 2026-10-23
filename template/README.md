@@ -1,6 +1,6 @@
 # Checkmarx One Go SDK — Project Template
 
-Pre-configured project template for building Go tools with the [cxone-sdk-golang](https://github.com/checkmarx-open-labs/cxone-sdk-golang) SDK.
+Pre-configured project template for building Go tools with the [cxone-sdk-golang](https://github.com/cx-andrew-gehring/cxone-sdk-golang) SDK.
 
 ## How to use
 
@@ -41,6 +41,6 @@ Pre-configured project template for building Go tools with the [cxone-sdk-golang
 
 ## SDK documentation
 
-- [SDK README](https://github.com/checkmarx-open-labs/cxone-sdk-golang/blob/main/README.md)
-- [SDK examples](https://github.com/checkmarx-open-labs/cxone-sdk-golang/tree/main/examples)
-- [CLAUDE.md architectural contract](https://github.com/checkmarx-open-labs/cxone-sdk-golang/blob/main/CLAUDE.md)
+- [SDK README](https://github.com/cx-andrew-gehring/cxone-sdk-golang/blob/main/README.md)
+- [SDK examples](https://github.com/cx-andrew-gehring/cxone-sdk-golang/tree/main/examples)
+- [CLAUDE.md architectural contract](https://github.com/cx-andrew-gehring/cxone-sdk-golang/blob/main/CLAUDE.md)

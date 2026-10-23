@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/models"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/models"
 )
 
 // newClientAgainst spins up an httptest server that handles BOTH the IAM

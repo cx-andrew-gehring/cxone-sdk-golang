@@ -9,11 +9,11 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/cxerrors"
-	endpoints "github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/scans"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/uploads"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/models"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/workflows/projects"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/cxerrors"
+	endpoints "github.com/cx-andrew-gehring/cxone-sdk-golang/internal/endpoints/scans"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/internal/endpoints/uploads"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/models"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/workflows/projects"
 )
 
 // Invoker is the fluent builder for starting a new Checkmarx One scan.

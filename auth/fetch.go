@@ -9,9 +9,9 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/cxerrors"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/redact"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/retry"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/cxerrors"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/internal/redact"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/internal/retry"
 )
 
 // tokenResponse is the subset of the OIDC token response we care about. The

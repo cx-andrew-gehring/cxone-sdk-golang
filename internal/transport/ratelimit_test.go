@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/cxerrors"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/cxerrors"
 )
 
 // A 429 is not retried (CLAUDE.md §4.4) and DoJSON's ResponseError carries

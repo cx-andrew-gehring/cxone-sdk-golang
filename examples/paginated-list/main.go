@@ -10,8 +10,8 @@ import (
 	"log"
 	"os"
 
-	cxone "github.com/checkmarx-open-labs/cxone-sdk-golang"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/pagination"
+	cxone "github.com/cx-andrew-gehring/cxone-sdk-golang"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/pagination"
 )
 
 func main() {

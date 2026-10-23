@@ -4,7 +4,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/cxerrors"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/cxerrors"
 )
 
 // Region identifies a Checkmarx One deployment by its IAM (auth) host and API

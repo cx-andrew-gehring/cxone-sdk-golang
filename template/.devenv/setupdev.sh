@@ -40,7 +40,7 @@ target=".goreleaser.yaml"
 repoUrl="$1"
 
 if [ -z "$repoUrl" ]; then
-    gitowner="checkmarx-open-labs"
+    gitowner="cx-andrew-gehring"
     gitrepo="$current_dir_name"
 else
     cleanUrl="${repoUrl#https://github.com/}"

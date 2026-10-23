@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/models"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/models"
 )
 
 // TestScanComparisonJSONRoundTrip pins the wire shape of the typed

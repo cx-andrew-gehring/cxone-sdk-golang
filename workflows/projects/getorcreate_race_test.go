@@ -7,8 +7,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/models"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/workflows/projects"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/models"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/workflows/projects"
 )
 
 // A concurrent creator wins between our lookup and create: the create gets a

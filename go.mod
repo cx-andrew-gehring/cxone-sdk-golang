@@ -1,4 +1,4 @@
-module github.com/checkmarx-open-labs/cxone-sdk-golang
+module github.com/cx-andrew-gehring/cxone-sdk-golang
 
 go 1.24.0
 

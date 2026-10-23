@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/url"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/cxerrors"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/cxerrors"
 )
 
 // astAppClientID is the hardcoded client_id used by the Checkmarx One IAM
