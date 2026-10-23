@@ -18,6 +18,7 @@ import (
 	projectsep "github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/projects"
 	scansep "github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/scans"
 	riskseps "github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/risks"
+	uploadsep "github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/uploads"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/retry"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/transport"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/models"
@@ -430,6 +431,17 @@ func (b *ClientBuilder) buildHTTPClient() (*http.Client, error) {
 // example — addressable through the same handle.
 func (c *Client) rootURL() string {
 	return c.region.DisplayRootURL()
+}
+
+// IsAPIOrigin reports whether rawURL has exactly the client's API origin
+// (scheme, host, effective port). It is the rule the presigned upload PUT
+// uses to decide whether to send the bearer token, so callers can tell an
+// API-origin upload failure (a 401/403 is an auth problem) from an object
+// store one (a 403 usually means an expired presigned URL). It fails closed:
+// URLs with userinfo, trailing-dot or non-ASCII hosts, or that do not parse,
+// are not the API origin. A sanitized URL (no query) works as well.
+func (c *Client) IsAPIOrigin(rawURL string) bool {
+	return uploadsep.SameOrigin(c.rootURL(), rawURL)
 }
 
 // Projects returns the high-level projects workflow handle. Used to obtain

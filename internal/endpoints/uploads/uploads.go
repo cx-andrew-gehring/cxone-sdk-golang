@@ -250,6 +250,12 @@ var putCeiling = 2 * time.Hour
 // classify (parse errors, userinfo, opaque, trailing-dot or non-ASCII hosts,
 // a scheme other than http/https) is NOT the same origin.
 func sameOrigin(apiBase, presigned string) bool {
+	return SameOrigin(apiBase, presigned)
+}
+
+// SameOrigin is the exported form of the upload same-origin rule, used by
+// cxone.Client.IsAPIOrigin.
+func SameOrigin(apiBase, presigned string) bool {
 	as, ah, ap, aok := originOf(apiBase)
 	ps, ph, pp, pok := originOf(presigned)
 	return aok && pok && as == ps && ah == ph && ap == pp
