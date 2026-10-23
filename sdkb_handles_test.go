@@ -12,9 +12,9 @@ import (
 	"strings"
 	"testing"
 
-	cxone "github.com/checkmarx-open-labs/cxone-sdk-golang"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/cxerrors"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/models"
+	cxone "github.com/cx-andrew-gehring/cxone-sdk-golang"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/cxerrors"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/models"
 )
 
 func clientAgainst(t *testing.T, api http.HandlerFunc) *cxone.Client {

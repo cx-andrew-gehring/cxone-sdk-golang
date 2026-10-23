@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/audit"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/internal/endpoints/audit"
 )
 
 func TestGetSASTQueries(t *testing.T) {

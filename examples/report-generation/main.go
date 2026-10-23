@@ -11,8 +11,8 @@ import (
 	"os"
 	"time"
 
-	cxone "github.com/checkmarx-open-labs/cxone-sdk-golang"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/workflows/reports"
+	cxone "github.com/cx-andrew-gehring/cxone-sdk-golang"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/workflows/reports"
 )
 
 func main() {

@@ -9,8 +9,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/models"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/workflows/scm"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/models"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/workflows/scm"
 )
 
 // recorder captures the sequence of request paths so tests can assert the

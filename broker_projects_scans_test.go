@@ -8,8 +8,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/models"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/pagination"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/models"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/pagination"
 )
 
 func TestScansListForProjectFiltersSortsAndPages(t *testing.T) {

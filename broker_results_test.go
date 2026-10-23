@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/pagination"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/pagination"
 )
 
 // pagedHandler serves pages[i] for the i-th page when paging by page number

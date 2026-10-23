@@ -4,9 +4,9 @@ import (
 	"context"
 	"sync"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/cxerrors"
-	endpoints "github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/users"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/models"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/cxerrors"
+	endpoints "github.com/cx-andrew-gehring/cxone-sdk-golang/internal/endpoints/users"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/models"
 )
 
 // UserReader is a cached view of the tenant's user catalog. It lazy-loads

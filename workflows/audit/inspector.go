@@ -3,9 +3,9 @@ package audit
 import (
 	"context"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/cxerrors"
-	endpoints "github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/audit"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/models"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/cxerrors"
+	endpoints "github.com/cx-andrew-gehring/cxone-sdk-golang/internal/endpoints/audit"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/models"
 )
 
 // SessionInspector wraps an [models.AuditSession] with typed status

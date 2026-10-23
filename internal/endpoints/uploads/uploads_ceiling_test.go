@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/cxerrors"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/cxerrors"
 )
 
 func TestPutFileZeroTimeoutClientUsesCeiling(t *testing.T) {

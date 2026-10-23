@@ -8,7 +8,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/transport"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/internal/transport"
 )
 
 // Path is the relative path to the logs endpoint.

@@ -20,7 +20,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/retry"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/internal/retry"
 )
 
 // Authenticator supplies bearer access tokens to the SDK request funnel.

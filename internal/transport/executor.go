@@ -9,11 +9,11 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/auth"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/cxerrors"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/redact"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/retry"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/observability"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/auth"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/cxerrors"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/internal/redact"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/internal/retry"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/observability"
 )
 
 // Config configures an [Executor]. The cxone client builder constructs one

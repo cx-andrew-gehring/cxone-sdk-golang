@@ -13,10 +13,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/auth"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/cxerrors"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/retry"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/observability"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/auth"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/cxerrors"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/internal/retry"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/observability"
 )
 
 // fastRetry returns a 3-attempt zero-delay policy.

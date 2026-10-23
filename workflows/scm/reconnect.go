@@ -4,9 +4,9 @@ import (
 	"context"
 	"strings"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/cxerrors"
-	endpoints "github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/scm"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/models"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/cxerrors"
+	endpoints "github.com/cx-andrew-gehring/cxone-sdk-golang/internal/endpoints/scm"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/models"
 )
 
 // ReconnectRequest describes the repository a project should be pointed at.

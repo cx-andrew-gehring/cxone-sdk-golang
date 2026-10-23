@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/url"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/cxerrors"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/cxerrors"
 )
 
 // OAuthCredentials carries the inputs for the OAuth client_credentials flow

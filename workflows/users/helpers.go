@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/cxerrors"
-	endpoints "github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/users"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/models"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/cxerrors"
+	endpoints "github.com/cx-andrew-gehring/cxone-sdk-golang/internal/endpoints/users"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/models"
 )
 
 // GetOrCreateByUsername returns the existing user whose username matches, or

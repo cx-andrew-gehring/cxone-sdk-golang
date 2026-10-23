@@ -19,10 +19,10 @@ import (
 	"context"
 	"sync"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/cxerrors"
-	endpoints "github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/projects"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/transport"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/models"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/cxerrors"
+	endpoints "github.com/cx-andrew-gehring/cxone-sdk-golang/internal/endpoints/projects"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/internal/transport"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/models"
 )
 
 // Backend bundles the dependencies a high-level workflow needs to issue
@@ -78,7 +78,7 @@ type ProjectRepoConfig struct {
 //
 // Side effects: exactly one HTTP request, no caching of the project
 // catalog. If you need many handles in bulk, prefer
-// [github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/projects.Iter]
+// [github.com/cx-andrew-gehring/cxone-sdk-golang/internal/endpoints/projects.Iter]
 // followed by [FromProjectModel].
 func FromProjectID(ctx context.Context, backend *Backend, projectID string) (*ProjectRepoConfig, error) {
 	if backend == nil || backend.Executor == nil {

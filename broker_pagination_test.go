@@ -12,7 +12,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/pagination"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/pagination"
 )
 
 type reqLog struct {

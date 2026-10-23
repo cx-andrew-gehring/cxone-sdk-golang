@@ -32,7 +32,7 @@ Accepted types:
 - **test**: testing and QA related
 
 #### References
-- [Checkmarx One Go SDK](https://github.com/checkmarx-open-labs/cxone-sdk-golang)
+- [Checkmarx One Go SDK](https://github.com/cx-andrew-gehring/cxone-sdk-golang)
 - [GoLangCI Linter](https://github.com/golangci/golangci-lint/)
 - [CommitLint](https://github.com/conventionalcommit/commitlint)
 - [Conventional commits](https://www.conventionalcommits.org)

@@ -1,6 +1,6 @@
 # cxone-sdk-golang
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/checkmarx-open-labs/cxone-sdk-golang.svg)](https://pkg.go.dev/github.com/checkmarx-open-labs/cxone-sdk-golang)
+[![Go Reference](https://pkg.go.dev/badge/github.com/cx-andrew-gehring/cxone-sdk-golang.svg)](https://pkg.go.dev/github.com/cx-andrew-gehring/cxone-sdk-golang)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 ![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?logo=go&logoColor=white)
 ![Version](https://img.shields.io/badge/version-0.9.0--rc.1-orange)
@@ -38,7 +38,7 @@ Idiomatic Go SDK for the [Checkmarx One](https://checkmarx.com/product/applicati
 ## Installation
 
 ```sh
-go get github.com/checkmarx-open-labs/cxone-sdk-golang
+go get github.com/cx-andrew-gehring/cxone-sdk-golang
 ```
 
 ## Quickstart
@@ -55,8 +55,8 @@ import (
     "os"
     "time"
 
-    cxone "github.com/checkmarx-open-labs/cxone-sdk-golang"
-    "github.com/checkmarx-open-labs/cxone-sdk-golang/workflows/scans"
+    cxone "github.com/cx-andrew-gehring/cxone-sdk-golang"
+    "github.com/cx-andrew-gehring/cxone-sdk-golang/workflows/scans"
 )
 
 func main() {
@@ -468,5 +468,5 @@ This project is licensed under the [Apache License 2.0](./LICENSE).
 ## Reference
 
 - [Checkmarx One API documentation](https://ast.checkmarx.net/spec/v1)
-- [Go package documentation](https://pkg.go.dev/github.com/checkmarx-open-labs/cxone-sdk-golang)
+- [Go package documentation](https://pkg.go.dev/github.com/cx-andrew-gehring/cxone-sdk-golang)
 - [`CLAUDE.md`](./CLAUDE.md) -- cross-language SDK architectural contract

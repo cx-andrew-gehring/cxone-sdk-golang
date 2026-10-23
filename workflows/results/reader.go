@@ -5,7 +5,7 @@
 // exposing the common "filter by state" path as its own method.
 //
 // For raw access to /api/results (e.g. to pass custom query parameters), use
-// [github.com/checkmarx-open-labs/cxone-sdk-golang/cxone.Client.Advanced].Results
+// [github.com/cx-andrew-gehring/cxone-sdk-golang/cxone.Client.Advanced].Results
 // directly.
 package results
 
@@ -14,12 +14,12 @@ import (
 	"encoding/json"
 	"net/url"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/cxerrors"
-	endpoints "github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/results"
-	sastendpoints "github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/sastresults"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/transport"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/models"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/pagination"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/cxerrors"
+	endpoints "github.com/cx-andrew-gehring/cxone-sdk-golang/internal/endpoints/results"
+	sastendpoints "github.com/cx-andrew-gehring/cxone-sdk-golang/internal/endpoints/sastresults"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/internal/transport"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/models"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/pagination"
 )
 
 // Backend bundles the dependencies the workflow needs to call the underlying

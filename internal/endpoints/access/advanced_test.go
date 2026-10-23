@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/access"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/internal/endpoints/access"
 )
 
 func TestGetMyGroups(t *testing.T) {

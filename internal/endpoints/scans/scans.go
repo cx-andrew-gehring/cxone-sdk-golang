@@ -14,9 +14,9 @@ import (
 	"net/url"
 	"strconv"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/transport"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/models"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/pagination"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/internal/transport"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/models"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/pagination"
 )
 
 // Path is the relative path appended to the API base URL for the scans
@@ -49,7 +49,7 @@ func List(ctx context.Context, e *transport.Executor, baseURL string, query url.
 }
 
 // Iter returns an item-yielding iterator over the scans matching query.
-// See [github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/projects.Iter]
+// See [github.com/cx-andrew-gehring/cxone-sdk-golang/internal/endpoints/projects.Iter]
 // for the offset-handling rationale; this function follows the same pattern.
 func Iter(e *transport.Executor, baseURL string, query url.Values, cfg pagination.Config) *pagination.Iterator[models.ScanResponseModel] {
 	cfg.OffsetIsByCount = true

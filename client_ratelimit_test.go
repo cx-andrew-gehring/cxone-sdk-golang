@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	cxone "github.com/checkmarx-open-labs/cxone-sdk-golang"
+	cxone "github.com/cx-andrew-gehring/cxone-sdk-golang"
 )
 
 // rateLimitedClient serves /api/projects/p1 with a 429 (Retry-After: 0) for

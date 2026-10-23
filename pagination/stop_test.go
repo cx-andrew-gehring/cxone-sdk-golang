@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/pagination"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/pagination"
 )
 
 func TestStopsOnShortPage(t *testing.T) {

@@ -14,7 +14,7 @@ import (
 	"log"
 	"os"
 
-	cxone "github.com/checkmarx-open-labs/cxone-sdk-golang"
+	cxone "github.com/cx-andrew-gehring/cxone-sdk-golang"
 )
 
 func main() {

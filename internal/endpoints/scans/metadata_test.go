@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/scans"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/internal/endpoints/scans"
 )
 
 func TestGetConfiguration(t *testing.T) {

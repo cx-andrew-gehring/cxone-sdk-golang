@@ -8,7 +8,7 @@
 
 ## SDK Overview
 
-This project uses [`github.com/checkmarx-open-labs/cxone-sdk-golang`](https://github.com/checkmarx-open-labs/cxone-sdk-golang), the idiomatic Go SDK for the Checkmarx One application-security platform. The SDK has **two layers**:
+This project uses [`github.com/cx-andrew-gehring/cxone-sdk-golang`](https://github.com/cx-andrew-gehring/cxone-sdk-golang), the idiomatic Go SDK for the Checkmarx One application-security platform. The SDK has **two layers**:
 
 - **High-level workflow layer** (`client.Projects()`, `client.Scans()`, `client.Presets()`, `client.Users()`, etc.) — fluent builders, inspectors, waiters, cached readers. This is the front door for 95% of use cases.
 - **Low-level Advanced layer** (`client.Advanced().Projects()`, `client.Advanced().Scans()`, etc.) — 1:1 endpoint wrappers. Use only when the workflow layer doesn't cover your use case.
@@ -131,7 +131,7 @@ Always prefer the workflow layer. Fall back to Advanced only when necessary.
 
 ### Models & Types
 
-26. **All public request/response types live in `models/`.** Import `github.com/checkmarx-open-labs/cxone-sdk-golang/models` for typed payloads.
+26. **All public request/response types live in `models/`.** Import `github.com/cx-andrew-gehring/cxone-sdk-golang/models` for typed payloads.
 
 27. **Unknown response fields are tolerated.** The SDK's JSON decoder ignores extras for forward compatibility. Do not validate response structs against a fixed schema.
 

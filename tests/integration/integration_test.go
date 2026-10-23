@@ -33,8 +33,8 @@ import (
 	"testing"
 	"time"
 
-	cxone "github.com/checkmarx-open-labs/cxone-sdk-golang"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/models"
+	cxone "github.com/cx-andrew-gehring/cxone-sdk-golang"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/models"
 )
 
 // env helpers ----------------------------------------------------------------

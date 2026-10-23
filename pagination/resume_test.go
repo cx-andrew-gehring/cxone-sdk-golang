@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/pagination"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/pagination"
 )
 
 // A caller that owns page retries (Retryable always false) calls Next again

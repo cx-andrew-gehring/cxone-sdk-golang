@@ -45,7 +45,7 @@
 ; Structured events: request.start, request.end, request.retry, auth.refresh, scan.poll
 
 ; --- Models & Types ---
-; Import models from github.com/checkmarx-open-labs/cxone-sdk-golang/models
+; Import models from github.com/cx-andrew-gehring/cxone-sdk-golang/models
 ; Use typed Region constants (cxone.RegionUS, cxone.RegionEU, etc.) — never hardcode URLs
 ; Unknown response fields are tolerated for forward compatibility
 
