@@ -16,6 +16,8 @@ package cxerrors
 import (
 	"errors"
 	"fmt"
+	"net/url"
+	"time"
 )
 
 // EndpointError is raised when the region or endpoint configuration is
@@ -65,19 +67,34 @@ type CommunicationError struct {
 	Attempt       int    // attempt number on which the request gave up (1-indexed)
 	CorrelationID string
 	Cause         error
+	// RetryAfter is the server's Retry-After (seconds or HTTP-date) on the
+	// final response, 0 when absent or unparseable.
+	RetryAfter time.Duration
 }
 
 func (e *CommunicationError) Error() string {
+	u := redactURL(e.URL)
 	if e.StatusCode != 0 {
 		return fmt.Sprintf(
 			"cxone: %s %s failed after %d attempt(s) with status %d (correlationId=%s)",
-			e.Method, e.URL, e.Attempt, e.StatusCode, e.CorrelationID,
+			e.Method, u, e.Attempt, e.StatusCode, e.CorrelationID,
 		)
 	}
 	return fmt.Sprintf(
 		"cxone: %s %s failed after %d attempt(s) (correlationId=%s): %v",
-		e.Method, e.URL, e.Attempt, e.CorrelationID, e.Cause,
+		e.Method, u, e.Attempt, e.CorrelationID, e.Cause,
 	)
+}
+
+// redactURL drops the query string, fragment and userinfo (presigned-URL
+// signatures, credentials) from a URL before it is printed.
+func redactURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "<invalid url>"
+	}
+	u.User, u.RawQuery, u.ForceQuery, u.Fragment, u.RawFragment = nil, "", false, "", ""
+	return u.String()
 }
 
 func (e *CommunicationError) Unwrap() error { return e.Cause }
@@ -91,6 +108,11 @@ type ResponseError struct {
 	CorrelationID string
 	Reason        string
 	Cause         error
+	// RetryAfter is the server's Retry-After (seconds or HTTP-date), set on
+	// any non-success status that carried one (typically 429 or 503); 0 when
+	// absent or unparseable. A 429 is not retried by the funnel (CLAUDE.md
+	// §4.4), so callers that want to retry use this as the delay.
+	RetryAfter time.Duration
 }
 
 func (e *ResponseError) Error() string {
@@ -178,3 +200,61 @@ var (
 func (e *AuthError) Is(target error) bool          { return target == ErrAuth }
 func (e *CommunicationError) Is(target error) bool { return target == ErrCommunication }
 func (e *ResponseError) Is(target error) bool      { return target == ErrResponse }
+
+// ConflictError is returned by the get-or-create workflows when the create
+// was rejected because the name already exists, but bounded re-lookups did
+// not find the existing resource (for example the winner of a concurrent
+// create is not yet visible to the listing). Retrying the whole operation
+// later is expected to succeed. The originating *ResponseError stays
+// reachable through errors.As.
+type ConflictError struct {
+	Resource string // e.g. "project"
+	Name     string
+	Cause    error
+}
+
+func (e *ConflictError) Error() string {
+	return fmt.Sprintf("cxone: %s %q already exists but was not found by name lookup: %v", e.Resource, e.Name, e.Cause)
+}
+
+func (e *ConflictError) Unwrap() error { return e.Cause }
+
+var _ error = (*ConflictError)(nil)
+
+// TriageErrorKind classifies the documented AI Triage submit/retrieve
+// failures that callers commonly handle (ADR-010 fail-open policy).
+type TriageErrorKind string
+
+const (
+	// TriageSourceUnavailable is HTTP 400: the source code is no longer
+	// available, so triage cannot run.
+	TriageSourceUnavailable TriageErrorKind = "source_unavailable"
+	// TriageInsufficientCredits is HTTP 402: AI consumption credits exhausted.
+	TriageInsufficientCredits TriageErrorKind = "insufficient_credits"
+	// TriageForbidden is HTTP 403: feature not enabled or insufficient roles.
+	TriageForbidden TriageErrorKind = "forbidden"
+)
+
+// TriageError is returned by the AI Triage endpoints for HTTP 400, 402 and
+// 403. The originating *ResponseError is preserved and reachable through
+// errors.As. Message is redacted before construction.
+type TriageError struct {
+	Kind          TriageErrorKind
+	Method        string
+	URL           string
+	StatusCode    int
+	CorrelationID string
+	Message       string
+	Cause         error
+}
+
+func (e *TriageError) Error() string {
+	return fmt.Sprintf(
+		"cxone: ai triage %s: %s %s returned status %d (correlationId=%s): %s",
+		e.Kind, e.Method, e.URL, e.StatusCode, e.CorrelationID, e.Message,
+	)
+}
+
+func (e *TriageError) Unwrap() error { return e.Cause }
+
+var _ error = (*TriageError)(nil)

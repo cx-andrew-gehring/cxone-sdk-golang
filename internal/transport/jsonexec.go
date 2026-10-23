@@ -6,10 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/cxerrors"
+	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/retry"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/models"
 )
 
@@ -114,7 +117,17 @@ func DoJSON(
 		StatusCode:    resp.StatusCode,
 		CorrelationID: resp.CorrelationID,
 		Reason:        reason,
+		RetryAfter:    retryAfter(resp.Header),
 	}
+}
+
+// retryAfter returns the parsed Retry-After of h, 0 when absent or malformed.
+func retryAfter(h http.Header) time.Duration {
+	if h == nil {
+		return 0
+	}
+	d, _ := retry.ParseRetryAfter(h.Get("Retry-After"), time.Now())
+	return d
 }
 
 // statusIn reports whether code is contained in expected.

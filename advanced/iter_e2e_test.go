@@ -75,11 +75,11 @@ func TestProjectsIterWalksMultiplePagesEndToEnd(t *testing.T) {
 		}
 	}
 
-	// 3 non-empty pages + 1 empty terminator.
-	if got := atomic.LoadInt32(&hits); got != 4 {
-		t.Errorf("hits = %d, want 4", got)
+	// 3 pages; the short final page ends the stream (no empty terminator).
+	if got := atomic.LoadInt32(&hits); got != 3 {
+		t.Errorf("hits = %d, want 3", got)
 	}
-	wantOffsets := []int32{0, 2, 4, 6}
+	wantOffsets := []int32{0, 2, 4}
 	if len(seenOffsets) != len(wantOffsets) {
 		t.Fatalf("offsets = %v, want %v", seenOffsets, wantOffsets)
 	}
@@ -161,10 +161,10 @@ func TestResultsIterPreservesScanIDAcrossPages(t *testing.T) {
 		seenScanIDs = append(seenScanIDs, r.URL.Query().Get("scan-id"))
 		off, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 		if off == 0 {
-			_, _ = io.WriteString(w, `{"results":[{"id":"r1"},{"id":"r2"}],"totalCount":2,"scanID":"s1"}`)
+			_, _ = io.WriteString(w, `{"results":[{"id":"r1"},{"id":"r2"}],"totalCount":4,"scanID":"s1"}`)
 			return
 		}
-		_, _ = io.WriteString(w, `{"results":[],"totalCount":2,"scanID":"s1"}`)
+		_, _ = io.WriteString(w, `{"results":[{"id":"r3"},{"id":"r4"}],"totalCount":4,"scanID":"s1"}`)
 	}))
 	defer srv.Close()
 
@@ -189,8 +189,8 @@ func TestResultsIterPreservesScanIDAcrossPages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(all) != 2 {
-		t.Errorf("got %d results, want 2", len(all))
+	if len(all) != 4 {
+		t.Errorf("got %d results, want 4", len(all))
 	}
 	if len(seenScanIDs) != 2 {
 		t.Fatalf("seenScanIDs = %v", seenScanIDs)

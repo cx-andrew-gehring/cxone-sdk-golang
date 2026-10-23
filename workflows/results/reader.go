@@ -11,10 +11,12 @@ package results
 
 import (
 	"context"
+	"encoding/json"
 	"net/url"
 
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/cxerrors"
 	endpoints "github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/results"
+	sastendpoints "github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/sastresults"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/transport"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/models"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/pagination"
@@ -35,6 +37,7 @@ type Backend struct {
 // per [Backend] and reuse it across calls.
 type Reader struct {
 	backend *Backend
+	paging  pagination.Config
 }
 
 // NewReader constructs a Reader. The reader is ready to use immediately;
@@ -42,6 +45,90 @@ type Reader struct {
 // *cxerrors.ConfigurationError.
 func NewReader(backend *Backend) *Reader {
 	return &Reader{backend: backend}
+}
+
+// WithPagination returns a copy of the reader whose raw streaming methods
+// ([Reader.Stream], [Reader.StreamSAST]) use cfg (page size, offset mode,
+// retries). The zero Config selects each endpoint's spec default paging
+// mode; see [pagination.OffsetMode].
+func (r *Reader) WithPagination(cfg pagination.Config) *Reader {
+	cp := *r
+	cp.paging = cfg
+	return &cp
+}
+
+// Stream pages through every result of scanID via GET /api/results and
+// calls fn with the raw JSON of each result (unknown fields preserved).
+// Memory use is bounded by one page. It stops at the first error from fn
+// (returned as-is), a page fetch failure, or ctx cancellation.
+func (r *Reader) Stream(ctx context.Context, scanID string, fn func(json.RawMessage) error) error {
+	return r.stream(ctx, scanID, nil, fn, endpoints.IterRaw, nil)
+}
+
+// StreamSAST is like [Reader.Stream] but uses GET /api/sast-results and
+// requests the given visible-columns (e.g. "result-id", "is-ai-generated").
+// An empty visibleColumns list leaves the server default.
+func (r *Reader) StreamSAST(ctx context.Context, scanID string, visibleColumns []string, fn func(json.RawMessage) error) error {
+	return r.stream(ctx, scanID, visibleColumns, fn, sastendpoints.IterRaw, nil)
+}
+
+// StreamWithStats is [Reader.Stream] that also returns how many items were
+// delivered and the server's totalCount. The SDK ends a stream on a short
+// page, so a service-side page-size cap below the configured page size ends
+// it after one page; [pagination.StreamStats.Truncated] detects that. The
+// stats are filled in on error too (items delivered so far).
+func (r *Reader) StreamWithStats(ctx context.Context, scanID string, fn func(json.RawMessage) error) (pagination.StreamStats, error) {
+	var st pagination.StreamStats
+	err := r.stream(ctx, scanID, nil, fn, endpoints.IterRaw, &st)
+	return st, err
+}
+
+// StreamSASTWithStats is [Reader.StreamSAST] with the stats of
+// [Reader.StreamWithStats].
+func (r *Reader) StreamSASTWithStats(ctx context.Context, scanID string, visibleColumns []string, fn func(json.RawMessage) error) (pagination.StreamStats, error) {
+	var st pagination.StreamStats
+	err := r.stream(ctx, scanID, visibleColumns, fn, sastendpoints.IterRaw, &st)
+	return st, err
+}
+
+type rawIterFunc func(e *transport.Executor, baseURL string, query url.Values, cfg pagination.Config) *pagination.Iterator[json.RawMessage]
+
+func (r *Reader) stream(ctx context.Context, scanID string, visibleColumns []string, fn func(json.RawMessage) error, mk rawIterFunc, st *pagination.StreamStats) error {
+	if err := r.checkBackend(); err != nil {
+		return err
+	}
+	if scanID == "" {
+		return &cxerrors.ConfigurationError{Field: "scanID", Reason: "is required"}
+	}
+	if fn == nil {
+		return &cxerrors.ConfigurationError{Field: "fn", Reason: "is required"}
+	}
+	q := url.Values{"scan-id": {scanID}}
+	if len(visibleColumns) > 0 {
+		q["visible-columns"] = append([]string(nil), visibleColumns...)
+	}
+	it := mk(r.backend.Executor, r.backend.BaseURL, q, r.paging)
+	if st != nil {
+		defer func() { st.Total, st.TotalKnown = it.Total() }()
+	}
+	for {
+		item, ok, err := it.Next(ctx)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return nil
+		}
+		if st != nil {
+			st.Delivered++
+		}
+		if err := fn(item); err != nil {
+			return err
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+	}
 }
 
 // ListAll iterates every result page for scanID and returns the flattened

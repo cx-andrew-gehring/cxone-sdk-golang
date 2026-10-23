@@ -55,6 +55,8 @@ func main() {
 	insp, err := client.Scans().NewScan(repo).
 		ForBranch("main").
 		WithEngines("sast", "sca").
+		// Scan-level tags (does not touch the project's tags; use
+		// WithProjectTags for that).
 		WithTags(map[string]string{"source": "sdk-example"}).
 		Start(ctx)
 	if err != nil {

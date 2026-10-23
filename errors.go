@@ -20,4 +20,5 @@ type (
 	ScanError          = cxerrors.ScanError
 	ConfigurationError = cxerrors.ConfigurationError
 	ReportError        = cxerrors.ReportError
+	ConflictError      = cxerrors.ConflictError
 )

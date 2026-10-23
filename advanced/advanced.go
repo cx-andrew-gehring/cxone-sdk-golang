@@ -20,11 +20,13 @@ package advanced
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
 
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/access"
+	aitriageep "github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/aitriage"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/analytics"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/applications"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/audit"
@@ -40,13 +42,14 @@ import (
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/presetmanager"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/projects"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/reports"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/roles"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/results"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/risks"
+	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/roles"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/sastmetadata"
-	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/scm"
+	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/sastresults"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/scanoverview"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/scans"
+	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/scm"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/telemetry"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/tenant"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/uploads"
@@ -151,6 +154,9 @@ func (h *Handle) ScanOverview() *ScanOverview { return &ScanOverview{h: h} }
 
 // Risks returns a typed handle to the Risk Management + APISec risks endpoints.
 func (h *Handle) Risks() *Risks { return &Risks{h: h} }
+
+// AITriage returns a typed handle to the AI Triage endpoints.
+func (h *Handle) AITriage() *AITriage { return &AITriage{h: h} }
 
 // Telemetry returns a typed handle to the AI telemetry endpoint.
 func (h *Handle) Telemetry() *Telemetry { return &Telemetry{h: h} }
@@ -303,10 +309,21 @@ func (u *Uploads) GetPresignedURL(ctx context.Context) (string, error) {
 }
 
 // PutFile uploads body (size bytes) to the supplied presigned URL using the
-// client's pooled HTTP client. See [uploads.PutFile] for the rationale on
-// why this bypasses the funnel.
+// client's pooled HTTP client. See [uploads.PutFileAuth] for why this
+// bypasses the funnel. The client's bearer token is attached if and only if
+// the presigned URL is on the client's own API origin (storage fronted by the
+// API host); URLs on any other host (S3/MinIO) get no Authorization header.
+// The upload is bounded by the HTTP client's Timeout, or a two-hour ceiling
+// when that is zero.
 func (u *Uploads) PutFile(ctx context.Context, presignedURL string, body io.Reader, size int64) error {
-	return uploads.PutFile(ctx, u.h.httpClient, presignedURL, body, size)
+	return uploads.PutFileAuth(ctx, u.h.httpClient, presignedURL, body, size, u.auth())
+}
+
+func (u *Uploads) auth() *uploads.Auth {
+	if u.h.executor == nil {
+		return nil
+	}
+	return &uploads.Auth{Authenticator: u.h.executor.Authenticator(), APIBaseURL: u.h.rootURL}
 }
 
 // UploadFromReader is a convenience that combines [Uploads.GetPresignedURL]
@@ -337,6 +354,19 @@ func (r *Results) List(ctx context.Context, query url.Values) (*models.ScanResul
 // query MUST contain "scan-id".
 func (r *Results) Iter(query url.Values, cfg pagination.Config) *pagination.Iterator[*models.ScanResult] {
 	return results.Iter(r.h.executor, r.h.rootURL, query, cfg)
+}
+
+// IterRaw returns an iterator over the raw JSON of each result (unknown
+// fields preserved). query MUST contain "scan-id". See results.IterRaw for
+// the paging-mode note.
+func (r *Results) IterRaw(query url.Values, cfg pagination.Config) *pagination.Iterator[json.RawMessage] {
+	return results.IterRaw(r.h.executor, r.h.rootURL, query, cfg)
+}
+
+// IterSASTRaw returns an iterator over GET /api/sast-results as raw JSON.
+// query MUST contain "scan-id" and may contain "visible-columns".
+func (r *Results) IterSASTRaw(query url.Values, cfg pagination.Config) *pagination.Iterator[json.RawMessage] {
+	return sastresults.IterRaw(r.h.executor, r.h.rootURL, query, cfg)
 }
 
 // ----- Reports ---------------------------------------------------------------
@@ -653,6 +683,31 @@ func (r *Risks) ListAPISecRisks(ctx context.Context, query url.Values) (*models.
 	return risks.ListAPISecRisks(ctx, r.h.executor, r.h.rootURL, query)
 }
 
+// ListRisks returns one page of GET /api/risks (projectId, engine, limit, offset).
+func (r *Risks) ListRisks(ctx context.Context, query url.Values) (*models.RisksPage, error) {
+	return risks.ListRisks(ctx, r.h.executor, r.h.rootURL, query)
+}
+
+// IterRisks returns an item iterator over every risk matching query.
+func (r *Risks) IterRisks(query url.Values, cfg pagination.Config) *pagination.Iterator[models.Risk] {
+	return risks.Iter(r.h.executor, r.h.rootURL, query, cfg)
+}
+
+// ----- AI Triage -------------------------------------------------------------
+
+// AITriage wraps the AI Triage endpoints.
+type AITriage struct{ h *Handle }
+
+// Submit calls POST /api/ai-triage/triage.
+func (a *AITriage) Submit(ctx context.Context, in *models.TriageRequest) (*models.TriageAccepted, error) {
+	return aitriageep.Submit(ctx, a.h.executor, a.h.rootURL, in)
+}
+
+// GetResult calls GET /api/ai-triage/triage/{project_id}/{group_id}.
+func (a *AITriage) GetResult(ctx context.Context, projectID, groupID string) (*models.TriageResultEnvelope, error) {
+	return aitriageep.GetResult(ctx, a.h.executor, a.h.rootURL, projectID, groupID)
+}
+
 // ----- Telemetry -------------------------------------------------------------
 
 // Telemetry wraps the AI telemetry endpoint.
@@ -900,6 +955,25 @@ func (s *SCM) ListIntegrations(ctx context.Context) ([]models.SCMIntegration, er
 }
 func (s *SCM) GetRepository(ctx context.Context, repositoryID uint64) (*models.SCMRepository, error) {
 	return scm.GetRepository(ctx, s.h.executor, s.h.rootURL, repositoryID)
+}
+
+// DisconnectProject reverts a code repository project to a manual project,
+// keeping its scan history.
+func (s *SCM) DisconnectProject(ctx context.Context, projectID string) error {
+	return scm.DisconnectProject(ctx, s.h.executor, s.h.rootURL, projectID)
+}
+
+// ConvertProjects starts an asynchronous conversion of manual projects into
+// code repository projects. Poll the returned process id with
+// [SCM.GetConversionStatus].
+func (s *SCM) ConvertProjects(ctx context.Context, req *models.SCMConversionRequest) (*models.SCMConversionResponse, error) {
+	return scm.ConvertProjects(ctx, s.h.executor, s.h.rootURL, req)
+}
+
+// GetConversionStatus returns the state of a conversion process. Process data
+// is retained for 7 days.
+func (s *SCM) GetConversionStatus(ctx context.Context, processID string) (*models.SCMConversionStatus, error) {
+	return scm.GetConversionStatus(ctx, s.h.executor, s.h.rootURL, processID)
 }
 
 // ----- PresetManager ---------------------------------------------------------

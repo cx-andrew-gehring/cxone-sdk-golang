@@ -45,11 +45,35 @@ type Config struct {
 }
 
 // ScanHandler is the upload-mode handler payload for a Scan request.
+//
+// RepoURL and Credentials are omitted from the wire when empty (the spec's
+// upload handler carries only uploadUrl, optional branch and uploadFormat);
+// UploadFormat is "single" for an SBOM upload.
 type ScanHandler struct {
-	Branch      string         `json:"branch,omitempty"`
-	RepoURL     string         `json:"repoUrl"`
-	UploadURL   string         `json:"uploadUrl"`
-	Credentials GitCredentials `json:"credentials"`
+	Branch       string         `json:"branch,omitempty"`
+	RepoURL      string         `json:"repoUrl,omitempty"`
+	UploadURL    string         `json:"uploadUrl"`
+	UploadFormat string         `json:"uploadFormat,omitempty"`
+	Credentials  GitCredentials `json:"credentials"`
+}
+
+// MarshalJSON omits the zero-valued Credentials struct (encoding/json's
+// omitempty cannot do this for a non-pointer struct) while keeping the
+// exported field type unchanged.
+func (h ScanHandler) MarshalJSON() ([]byte, error) {
+	type wire struct {
+		Branch       string          `json:"branch,omitempty"`
+		RepoURL      string          `json:"repoUrl,omitempty"`
+		UploadURL    string          `json:"uploadUrl"`
+		UploadFormat string          `json:"uploadFormat,omitempty"`
+		Credentials  *GitCredentials `json:"credentials,omitempty"`
+	}
+	w := wire{Branch: h.Branch, RepoURL: h.RepoURL, UploadURL: h.UploadURL, UploadFormat: h.UploadFormat}
+	if h.Credentials != (GitCredentials{}) {
+		c := h.Credentials
+		w.Credentials = &c
+	}
+	return json.Marshal(w)
 }
 
 // GitProjectHandler is the git-mode handler payload for a Scan request.
@@ -115,9 +139,12 @@ type ScansCollectionResponseModel struct {
 }
 
 // ScanProject is the project-handle nested inside a Scan request.
+//
+// Tags is omitted when nil/empty: per the spec, project.tags on a scan
+// request OVERWRITES the project's tags, so it is only sent on purpose.
 type ScanProject struct {
 	ID   string            `json:"id"`
-	Tags map[string]string `json:"tags"`
+	Tags map[string]string `json:"tags,omitempty"`
 }
 
 // Scan is the create-scan request body.

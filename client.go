@@ -3,6 +3,8 @@ package cxone
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
+	"errors"
 	"net/http"
 	"net/url"
 	"sync"
@@ -13,11 +15,16 @@ import (
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/advanced"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/auth"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/cxerrors"
+	projectsep "github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/projects"
+	scansep "github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/scans"
+	riskseps "github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/risks"
+	uploadsep "github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/uploads"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/retry"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/internal/transport"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/models"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/observability"
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/pagination"
+	wfaitriage "github.com/checkmarx-open-labs/cxone-sdk-golang/workflows/aitriage"
 	wfaudit "github.com/checkmarx-open-labs/cxone-sdk-golang/workflows/audit"
 	wfclients "github.com/checkmarx-open-labs/cxone-sdk-golang/workflows/clients"
 	wfgroups "github.com/checkmarx-open-labs/cxone-sdk-golang/workflows/groups"
@@ -28,6 +35,7 @@ import (
 	wfresults "github.com/checkmarx-open-labs/cxone-sdk-golang/workflows/results"
 	wfroles "github.com/checkmarx-open-labs/cxone-sdk-golang/workflows/roles"
 	wfscans "github.com/checkmarx-open-labs/cxone-sdk-golang/workflows/scans"
+	wfscm "github.com/checkmarx-open-labs/cxone-sdk-golang/workflows/scm"
 	wfusers "github.com/checkmarx-open-labs/cxone-sdk-golang/workflows/users"
 )
 
@@ -130,6 +138,9 @@ type ClientBuilder struct {
 	metrics      observability.Metrics
 	tracer       observability.Tracer
 	interceptors []Interceptor
+
+	// rateLimitMaxWait > 0 opts in to retrying 429 (RetryOnTooManyRequests).
+	rateLimitMaxWait time.Duration
 }
 
 type authMode int
@@ -226,6 +237,31 @@ func (b *ClientBuilder) RandomizeRetryDelay(on bool) *ClientBuilder {
 	return b
 }
 
+// RetryOnTooManyRequests opts in to retrying HTTP 429 (Too Many Requests) in
+// the request funnel. It is OFF by default: without it a 429 is returned at
+// once, as CLAUDE.md §4.4 requires, and the error's RetryAfter carries the
+// server's Retry-After so the caller can schedule its own retry.
+//
+// When maxWait > 0, a 429 is retried within the normal attempt budget
+// ([ClientBuilder.Retries]; it does not add attempts). The wait before the
+// next attempt is the server's Retry-After (delta-seconds or HTTP-date) when
+// present, otherwise the normal jittered backoff ([ClientBuilder.RetryDelaySeconds]).
+// The 429 is returned unchanged instead of retried when Retry-After exceeds
+// maxWait, when it would outlast the call's deadline (the per-request
+// [ClientBuilder.Timeout] covers the whole call, waits included), or on the
+// last attempt. Waits are cancelled with the call's context. Each retry emits
+// the usual request_retry log event and Metrics.IncRetry("status_429").
+//
+// Every method is retried, POST included: a 429 means the server rejected the
+// request without processing it, so re-sending it cannot duplicate an effect.
+//
+// maxWait == 0 leaves the opt-in off; a negative value is a
+// [*ConfigurationError] from Build.
+func (b *ClientBuilder) RetryOnTooManyRequests(maxWait time.Duration) *ClientBuilder {
+	b.rateLimitMaxWait = maxWait
+	return b
+}
+
 // Proxy sets an HTTP/HTTPS proxy URL. Empty string disables the proxy.
 func (b *ClientBuilder) Proxy(rawURL string) *ClientBuilder {
 	b.proxyURL = rawURL
@@ -297,6 +333,9 @@ func (b *ClientBuilder) Build() (*Client, error) {
 			Reason: "one of OAuth, APIKey, or Authenticator must be configured",
 		}
 	}
+	if b.rateLimitMaxWait < 0 {
+		return nil, &cxerrors.ConfigurationError{Field: "RetryOnTooManyRequests", Reason: "maxWait must not be negative"}
+	}
 
 	httpClient, err := b.buildHTTPClient()
 	if err != nil {
@@ -363,6 +402,8 @@ func (b *ClientBuilder) Build() (*Client, error) {
 		Logger:        logger,
 		Metrics:       metrics,
 		Tracer:        tracer,
+
+		RateLimitMaxWait: b.rateLimitMaxWait,
 	})
 
 	return &Client{
@@ -423,6 +464,17 @@ func (b *ClientBuilder) buildHTTPClient() (*http.Client, error) {
 // example — addressable through the same handle.
 func (c *Client) rootURL() string {
 	return c.region.DisplayRootURL()
+}
+
+// IsAPIOrigin reports whether rawURL has exactly the client's API origin
+// (scheme, host, effective port). It is the rule the presigned upload PUT
+// uses to decide whether to send the bearer token, so callers can tell an
+// API-origin upload failure (a 401/403 is an auth problem) from an object
+// store one (a 403 usually means an expired presigned URL). It fails closed:
+// URLs with userinfo, trailing-dot or non-ASCII hosts, or that do not parse,
+// are not the API origin. A sanitized URL (no query) works as well.
+func (c *Client) IsAPIOrigin(rawURL string) bool {
+	return uploadsep.SameOrigin(c.rootURL(), rawURL)
 }
 
 // Projects returns the high-level projects workflow handle. Used to obtain
@@ -502,6 +554,51 @@ func (h *ProjectsHandle) GetOrCreateInApplicationByName(ctx context.Context, pro
 	return wfprojects.GetOrCreateInApplicationByName(ctx, h.backend, projectName, applicationName)
 }
 
+// IterByNameRegex iterates projects whose name matches the regular
+// expression pattern (GET /api/projects?name-regex=). Pattern syntax is the
+// server's. Pass-through only: the SDK does not compile the pattern.
+func (h *ProjectsHandle) IterByNameRegex(pattern string) *pagination.Iterator[models.ProjectResponseModel] {
+	return projectsep.Iter(h.backend.Executor, h.backend.BaseURL, url.Values{"name-regex": {pattern}}, pagination.Config{})
+}
+
+// Delete removes a project. When cancelRunning is true, every Queued or
+// Running scan of the project is first cancelled (PATCH /api/scans/{id}
+// {"status":"Canceled"}) so the delete is not blocked by active scans.
+// A 404 at any step (project or scan already gone) counts as success.
+func (h *ProjectsHandle) Delete(ctx context.Context, projectID string, cancelRunning bool) error {
+	if projectID == "" {
+		return &ConfigurationError{Field: "projectID", Reason: "is required"}
+	}
+	if cancelRunning {
+		it := scansep.Iter(h.backend.Executor, h.backend.BaseURL, url.Values{
+			"project-id": {projectID},
+			"statuses":   {models.ScanQueued, models.ScanRunning},
+		}, pagination.Config{})
+		// Collect first: cancelling while paging could shift offsets.
+		active, err := pagination.Collect(ctx, it)
+		if err != nil && !isNotFound(err) {
+			return err
+		}
+		for _, sc := range active {
+			if sc.Status != models.ScanQueued && sc.Status != models.ScanRunning {
+				continue
+			}
+			if err := scansep.Cancel(ctx, h.backend.Executor, h.backend.BaseURL, sc.ID); err != nil && !isNotFound(err) {
+				return err
+			}
+		}
+	}
+	if err := projectsep.Delete(ctx, h.backend.Executor, h.backend.BaseURL, projectID); err != nil && !isNotFound(err) {
+		return err
+	}
+	return nil
+}
+
+func isNotFound(err error) bool {
+	var re *ResponseError
+	return errors.As(err, &re) && re.StatusCode == http.StatusNotFound
+}
+
 // ScansHandle wraps the scans workflow with method-style ergonomics.
 type ScansHandle struct {
 	client  *Client
@@ -511,6 +608,32 @@ type ScansHandle struct {
 // Get loads a scan by id and returns a populated [wfscans.ScanInspector].
 func (h *ScansHandle) Get(ctx context.Context, scanID string) (*wfscans.ScanInspector, error) {
 	return wfscans.FromScanID(ctx, h.backend, scanID)
+}
+
+// ListForProject returns every scan of the project, newest first
+// (GET /api/scans?project-id=...&sort=-created_at), paging to exhaustion.
+// A project with no scans yields an empty (non-nil) slice.
+func (h *ScansHandle) ListForProject(ctx context.Context, projectID string) ([]*wfscans.ScanInspector, error) {
+	if projectID == "" {
+		return nil, &ConfigurationError{Field: "projectID", Reason: "is required"}
+	}
+	it := scansep.Iter(h.backend.Executor, h.backend.BaseURL, url.Values{
+		"project-id": {projectID},
+		"sort":       {"-created_at"},
+	}, pagination.Config{})
+	page, err := pagination.Collect(ctx, it)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]*wfscans.ScanInspector, 0, len(page))
+	for i := range page {
+		insp, err := wfscans.FromScanModel(h.backend, &page[i])
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, insp)
+	}
+	return out, nil
 }
 
 // NewScan returns a fluent builder for starting a new scan against the
@@ -558,6 +681,38 @@ func (h *ResultsHandle) ListByState(ctx context.Context, scanID, state string) (
 // plus the optional filters in query.
 func (h *ResultsHandle) Iter(scanID string, query url.Values) *pagination.Iterator[*models.ScanResult] {
 	return h.reader.Iter(scanID, query)
+}
+
+// WithPagination returns a copy of the handle whose Stream/StreamSAST use
+// cfg for paging (page size and [pagination.OffsetMode]). Defaults follow
+// the OpenAPI spec per endpoint: /api/results counts pages, /api/sast-results
+// counts items (pending spike S1 confirmation).
+func (h *ResultsHandle) WithPagination(cfg pagination.Config) *ResultsHandle {
+	return &ResultsHandle{reader: h.reader.WithPagination(cfg)}
+}
+
+// Stream pages through all results of a scan and calls fn with each raw JSON
+// result. See [wfresults.Reader.Stream].
+func (h *ResultsHandle) Stream(ctx context.Context, scanID string, fn func(json.RawMessage) error) error {
+	return h.reader.Stream(ctx, scanID, fn)
+}
+
+// StreamSAST streams GET /api/sast-results with the given visible-columns.
+// See [wfresults.Reader.StreamSAST].
+func (h *ResultsHandle) StreamSAST(ctx context.Context, scanID string, visibleColumns []string, fn func(json.RawMessage) error) error {
+	return h.reader.StreamSAST(ctx, scanID, visibleColumns, fn)
+}
+
+// StreamWithStats is [ResultsHandle.Stream] that also returns the delivered
+// count and the server's totalCount. See [wfresults.Reader.StreamWithStats].
+func (h *ResultsHandle) StreamWithStats(ctx context.Context, scanID string, fn func(json.RawMessage) error) (pagination.StreamStats, error) {
+	return h.reader.StreamWithStats(ctx, scanID, fn)
+}
+
+// StreamSASTWithStats is [ResultsHandle.StreamSAST] with the stats of
+// [ResultsHandle.StreamWithStats].
+func (h *ResultsHandle) StreamSASTWithStats(ctx context.Context, scanID string, visibleColumns []string, fn func(json.RawMessage) error) (pagination.StreamStats, error) {
+	return h.reader.StreamSASTWithStats(ctx, scanID, visibleColumns, fn)
 }
 
 // ReportsHandle wraps the reports workflow with method-style ergonomics.
@@ -711,6 +866,112 @@ type MigrationHandle struct {
 // an [wfmigration.ImportInspector].
 func (h *MigrationHandle) GetImport(ctx context.Context, importID string) (*wfmigration.ImportInspector, error) {
 	return wfmigration.FromImportID(ctx, h.backend, importID)
+}
+
+// SCM returns the high-level source-control-management workflow handle.
+func (c *Client) SCM() *SCMHandle {
+	return &SCMHandle{
+		backend: &wfscm.Backend{Executor: c.executor, BaseURL: c.rootURL()},
+	}
+}
+
+// SCMHandle wraps the SCM workflow.
+type SCMHandle struct {
+	backend *wfscm.Backend
+}
+
+// Reconnect points an existing project at a different repository, preserving
+// the project and its scan history. It disconnects the project from its
+// current integration and submits a conversion against the target repo,
+// returning an inspector for the resulting asynchronous process.
+//
+// The two calls are not atomic — see [wfscm.Reconnect] for the failure
+// semantics. Pass the returned inspector to [wfscm.WaitUntilComplete] to poll
+// it to a terminal state.
+func (h *SCMHandle) Reconnect(ctx context.Context, projectID string, req wfscm.ReconnectRequest) (*wfscm.ConversionInspector, error) {
+	return wfscm.Reconnect(ctx, h.backend, projectID, req)
+}
+
+// Disconnect reverts a code repository project to a manual project, keeping
+// its scan history.
+func (h *SCMHandle) Disconnect(ctx context.Context, projectID string) error {
+	return wfscm.Disconnect(ctx, h.backend, projectID)
+}
+
+// GetConversion loads the current state of a conversion process and returns a
+// [wfscm.ConversionInspector]. Process data is retained for 7 days.
+func (h *SCMHandle) GetConversion(ctx context.Context, processID string) (*wfscm.ConversionInspector, error) {
+	return wfscm.FromProcessID(ctx, h.backend, processID)
+}
+
+// AITriage returns the high-level AI Triage workflow handle.
+func (c *Client) AITriage() *AITriageHandle {
+	return &AITriageHandle{
+		backend: &wfaitriage.Backend{Executor: c.executor, BaseURL: c.rootURL()},
+	}
+}
+
+// AITriageHandle wraps the AI Triage workflow.
+type AITriageHandle struct {
+	backend *wfaitriage.Backend
+}
+
+// Submit requests AI triage of buckets for scanID. A response with
+// Published=false (identical job already exists) is a success. HTTP 400, 402
+// and 403 are returned as *cxerrors.TriageError.
+func (h *AITriageHandle) Submit(ctx context.Context, scanID string, buckets ...models.TriageBucket) (*models.TriageAccepted, error) {
+	return wfaitriage.Submit(ctx, h.backend, scanID, buckets...)
+}
+
+// Result fetches the triage state for one vulnerability group (use the
+// groupId from [RisksHandle.GroupIDs]).
+func (h *AITriageHandle) Result(ctx context.Context, projectID, groupID string) (*wfaitriage.ResultInspector, error) {
+	return wfaitriage.GetResult(ctx, h.backend, projectID, groupID)
+}
+
+// Risks returns the high-level risks handle (GET /api/risks).
+func (c *Client) Risks() *RisksHandle {
+	return &RisksHandle{executor: c.executor, baseURL: c.rootURL()}
+}
+
+// RisksHandle wraps the project risks listing.
+type RisksHandle struct {
+	executor *transport.Executor
+	baseURL  string
+}
+
+// GroupIDs pages through GET /api/risks for projectID (optionally filtered to
+// engines, e.g. "SAST", "SCA") and returns the unique groupId values in
+// first-seen order. Risks without a groupId are skipped.
+func (h *RisksHandle) GroupIDs(ctx context.Context, projectID string, engines ...string) ([]string, error) {
+	if projectID == "" {
+		return nil, &cxerrors.ConfigurationError{Field: "projectID", Reason: "is required"}
+	}
+	q := url.Values{"projectId": {projectID}}
+	for _, e := range engines {
+		q.Add("engine", e)
+	}
+	it := riskseps.Iter(h.executor, h.baseURL, q, pagination.Config{})
+	seen := make(map[string]struct{})
+	ids := make([]string, 0)
+	for {
+		r, ok, err := it.Next(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			break
+		}
+		if r.GroupID == "" {
+			continue
+		}
+		if _, dup := seen[r.GroupID]; dup {
+			continue
+		}
+		seen[r.GroupID] = struct{}{}
+		ids = append(ids, r.GroupID)
+	}
+	return ids, nil
 }
 
 // Advanced returns a typed handle to the SDK's low-level endpoint layer.

@@ -167,6 +167,7 @@ The [`examples/`](./examples/) directory ships runnable programs that demonstrat
 | [`analytics-dashboard`](./examples/analytics-dashboard/) | Severity KPIs, MTTR, most-common vulnerabilities |
 | [`import-migration`](./examples/import-migration/) | List imports, start import, poll with ImportInspector |
 | [`scan-comparison`](./examples/scan-comparison/) | Diff two scans into new/resolved/recurrent counts by severity, plus not-exploitable summary |
+| [`scm-reconnect`](./examples/scm-reconnect/) | Re-point a project at a new repo (possibly a different SCM), preserving scan history — dry-run by default |
 
 Run any example:
 
@@ -370,7 +371,8 @@ cxone-sdk-golang/
 │   ├── clients/          #   OIDC client management
 │   ├── groups/           #   Group management
 │   ├── audit/            #   Query-editor audit sessions
-│   └── migration/        #   Data import/migration
+│   ├── migration/        #   Data import/migration
+│   └── scm/              #   Repo disconnect/reconnect, conversion polling
 ├── pagination/           # Generic Iterator[T] and GraphQL iterator
 ├── observability/        # Logger, Metrics, Tracer interfaces + no-ops
 ├── advanced/             # Low-level endpoint access handle
@@ -380,7 +382,7 @@ cxone-sdk-golang/
 │   ├── retry/            #   Retry policy and backoff
 │   └── redact/           #   Secret redaction
 ├── cxerrors/             # Typed error catalog
-├── examples/             # 11 runnable example programs
+├── examples/             # 13 runnable example programs
 └── tests/integration/    # Integration test suite
 ```
 
@@ -403,13 +405,28 @@ Integration tests require a live Checkmarx One tenant. Set the following environ
 | `TEST_OAUTH_CLIENT_ID` | For OAuth tests | OAuth client ID |
 | `TEST_OAUTH_CLIENT_SECRET` | For OAuth tests | OAuth client secret |
 | `TEST_API_KEY` | For API-key tests | Checkmarx One API key |
-| `TEST_TENANT_ID` | Yes | Tenant name |
+| `TEST_TENANT` | Yes | Tenant name |
 | `TEST_REGION` | Yes | Region key (US, EU, etc.) |
 
 ```sh
-export TEST_TENANT_ID=acme TEST_API_KEY=... TEST_REGION=US
-go test ./tests/integration/... -v
+export TEST_TENANT=acme TEST_API_KEY=... TEST_REGION=US
+go test -tags=integration ./tests/integration/... -v
 ```
+
+#### Opt-in SCM reconnect test
+
+`TestReconnectProject` re-points a real project at a different repository, so
+it is gated behind its own variables and skips unless all four are set. It does
+not restore the original repository — point it only at a disposable project.
+
+| Variable | Description |
+|---|---|
+| `TEST_SCM_PROJECT_ID` | Id of a disposable project to re-point |
+| `TEST_SCM_TYPE` | `github`, `gitlab`, `azure`, `bitbucket`, or `githubApp` |
+| `TEST_SCM_ORG` | Target SCM organization |
+| `TEST_SCM_REPO_URL` | Target repo URL, without a `.git` suffix |
+| `TEST_SCM_BRANCHES` | Optional, comma-separated. Defaults to `main` |
+| `TEST_SCM_TOKEN` | Optional SCM access token |
 
 Integration tests run against **both** OAuth and API-key clients in parallel (dual-auth test base). Tests are automatically skipped when the required credentials are absent. Cleanup hooks ensure test-created projects, presets, and scans are removed even on failure.
 

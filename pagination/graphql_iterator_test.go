@@ -84,7 +84,7 @@ func TestGraphQLIteratorWalksMultiplePages(t *testing.T) {
 	if len(all) != len(want) {
 		t.Fatalf("got %v, want %v", all, want)
 	}
-	wantSkipTake := [][2]int{{0, 3}, {3, 3}, {6, 3}, {9, 3}}
+	wantSkipTake := [][2]int{{0, 3}, {3, 3}, {6, 3}}
 	if len(gql.gotSkipTake) != len(wantSkipTake) {
 		t.Fatalf("calls = %v, want %v", gql.gotSkipTake, wantSkipTake)
 	}
