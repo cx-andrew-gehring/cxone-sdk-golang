@@ -138,6 +138,9 @@ type ClientBuilder struct {
 	metrics      observability.Metrics
 	tracer       observability.Tracer
 	interceptors []Interceptor
+
+	// rateLimitMaxWait > 0 opts in to retrying 429 (RetryOnTooManyRequests).
+	rateLimitMaxWait time.Duration
 }
 
 type authMode int
@@ -234,6 +237,31 @@ func (b *ClientBuilder) RandomizeRetryDelay(on bool) *ClientBuilder {
 	return b
 }
 
+// RetryOnTooManyRequests opts in to retrying HTTP 429 (Too Many Requests) in
+// the request funnel. It is OFF by default: without it a 429 is returned at
+// once, as CLAUDE.md §4.4 requires, and the error's RetryAfter carries the
+// server's Retry-After so the caller can schedule its own retry.
+//
+// When maxWait > 0, a 429 is retried within the normal attempt budget
+// ([ClientBuilder.Retries]; it does not add attempts). The wait before the
+// next attempt is the server's Retry-After (delta-seconds or HTTP-date) when
+// present, otherwise the normal jittered backoff ([ClientBuilder.RetryDelaySeconds]).
+// The 429 is returned unchanged instead of retried when Retry-After exceeds
+// maxWait, when it would outlast the call's deadline (the per-request
+// [ClientBuilder.Timeout] covers the whole call, waits included), or on the
+// last attempt. Waits are cancelled with the call's context. Each retry emits
+// the usual request_retry log event and Metrics.IncRetry("status_429").
+//
+// Every method is retried, POST included: a 429 means the server rejected the
+// request without processing it, so re-sending it cannot duplicate an effect.
+//
+// maxWait == 0 leaves the opt-in off; a negative value is a
+// [*ConfigurationError] from Build.
+func (b *ClientBuilder) RetryOnTooManyRequests(maxWait time.Duration) *ClientBuilder {
+	b.rateLimitMaxWait = maxWait
+	return b
+}
+
 // Proxy sets an HTTP/HTTPS proxy URL. Empty string disables the proxy.
 func (b *ClientBuilder) Proxy(rawURL string) *ClientBuilder {
 	b.proxyURL = rawURL
@@ -305,6 +333,9 @@ func (b *ClientBuilder) Build() (*Client, error) {
 			Reason: "one of OAuth, APIKey, or Authenticator must be configured",
 		}
 	}
+	if b.rateLimitMaxWait < 0 {
+		return nil, &cxerrors.ConfigurationError{Field: "RetryOnTooManyRequests", Reason: "maxWait must not be negative"}
+	}
 
 	httpClient, err := b.buildHTTPClient()
 	if err != nil {
@@ -371,6 +402,8 @@ func (b *ClientBuilder) Build() (*Client, error) {
 		Logger:        logger,
 		Metrics:       metrics,
 		Tracer:        tracer,
+
+		RateLimitMaxWait: b.rateLimitMaxWait,
 	})
 
 	return &Client{

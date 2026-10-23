@@ -180,6 +180,8 @@ Nothing in the SDK may bypass this funnel.
 
 After the final attempt, raise the SDK's `CommunicationException` (§7).
 
+**Optional extension: opt-in 429 retry.** An SDK may offer a builder option (Go: `RetryOnTooManyRequests(maxWait)`) that is **off by default**, so the rules above, and cross-language parity, hold unless a caller turns it on. When on, a `429` is retried within the same attempt budget, waiting the server's `Retry-After` (seconds or HTTP-date) or the normal jittered backoff when it is absent. It is not retried when `Retry-After` exceeds `maxWait` or the call's deadline, or on the last attempt; then the `429` is returned as with the option off. Any method may be retried, because a `429` means the request was not processed.
+
 ### 4.5 Auth lifecycle
 
 - **Lazy first auth.** No token is fetched until the first request. The first request triggers a token fetch.

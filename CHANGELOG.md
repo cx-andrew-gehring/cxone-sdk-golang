@@ -96,11 +96,24 @@ Changes since `00d52c7`.
   `pagination.StreamStats{Delivered, Total, TotalKnown}` with `Truncated()`.
 - `RetryAfter time.Duration` on `ResponseError` and `CommunicationError`:
   the parsed `Retry-After` header (seconds or HTTP-date) of the final
-  response, 0 when absent. HTTP 429 is still NOT retried by the request
-  funnel (CLAUDE.md §4.4); callers that retry use this value.
+  response, 0 when absent. By default HTTP 429 is still NOT retried by the
+  request funnel (CLAUDE.md §4.4); callers that retry use this value.
+- `ClientBuilder.RetryOnTooManyRequests(maxWait time.Duration)`: an opt-in,
+  OFF by default (default behaviour is unchanged: a 429 is returned at once
+  with `RetryAfter`). With `maxWait > 0` the funnel retries a 429 within the
+  existing `Retries` attempt budget, waiting the server's `Retry-After`
+  (seconds or HTTP-date) or, when absent, the normal jittered backoff. The
+  429 is returned unchanged instead when `Retry-After` exceeds `maxWait`,
+  when it would outlast the call's deadline, or on the last attempt. Waits
+  are cancelled with the context. Every method is retried, POST included:
+  a 429 means the server did not process the request, so a re-send cannot
+  duplicate its effect. Each retry emits the `request_retry` log event and
+  `Metrics.IncRetry("status_429")`. Negative `maxWait` is a
+  `ConfigurationError`. Documented in CLAUDE.md §4.4 as an optional extension.
 - `Client.IsAPIOrigin(url)`: the same-origin rule the upload PUT uses for the
   bearer token, so callers can tell an API-origin upload failure from an
   object-store one.
 - internal API: `uploads.PutFileAuth`, `uploads.PutFileAuthWithTimeout`,
   `uploads.Auth`, `uploads.SameOrigin`, `transport.Executor.Authenticator()`,
-  `retry.ParseRetryAfter`. Existing signatures are unchanged.
+  `retry.ParseRetryAfter`, `retry.WithDelay`, `retry.UnknownOutcomeError`,
+  `transport.Config.RateLimitMaxWait`. Existing signatures are unchanged.
