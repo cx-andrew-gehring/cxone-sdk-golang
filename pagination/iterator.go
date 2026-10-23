@@ -237,8 +237,11 @@ func NewWithOptions[T any](cfg Config, fetch PageFetcher[T], opts Options[T]) *I
 // that this is the SAME shape as a normal end-of-iteration in Go's
 // idiomatic stream pattern.
 //
-// On a non-recoverable fetch error Next returns (zero, false, err); the
-// iterator should not be used after that.
+// On a fetch error Next returns (zero, false, err) without advancing: calling
+// Next again re-fetches the same page. Callers that own page retries (set
+// [Config.Retryable] to always return false) rely on this. After
+// [ErrPaginationStalled] or [ErrMaxPagesExceeded] the iterator should not be
+// used again.
 func (it *Iterator[T]) Next(ctx context.Context) (T, bool, error) {
 	var zero T
 	if it.exhausted && len(it.buffer) == 0 {
