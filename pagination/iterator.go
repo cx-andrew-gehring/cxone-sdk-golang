@@ -357,6 +357,34 @@ func (it *Iterator[T]) advanceOffset(pageLen int) {
 	}
 }
 
+// Total reports the upstream's total item count as seen on the most recently
+// fetched page, when the iterator was built with [Options.Total] and the
+// endpoint reported one (ok=false otherwise, and before the first fetch).
+//
+// The iterator ends on a short page. A service that caps the page size below
+// [Config.PageSize] therefore ends the stream after its first page; comparing
+// the number of items consumed with Total after the stream ends detects that
+// truncation (see [StreamStats]).
+func (it *Iterator[T]) Total() (total int, ok bool) {
+	if it.opts.Total == nil || it.pagesFetched == 0 {
+		return 0, false
+	}
+	return it.opts.Total()
+}
+
+// StreamStats summarises a finished stream: the number of items delivered to
+// the caller and the upstream's reported total, when known.
+type StreamStats struct {
+	Delivered  int
+	Total      int
+	TotalKnown bool
+}
+
+// Truncated reports whether the upstream reported more items than were
+// delivered (for example a page-size cap on the service side made the first
+// page short and so ended the stream early).
+func (s StreamStats) Truncated() bool { return s.TotalKnown && s.Delivered < s.Total }
+
 // All returns a Go 1.23 range-over-func sequence so callers can iterate with
 // the standard for-range syntax. The yielded error is non-nil exactly when
 // iteration aborts due to a fetch failure; in that case the loop terminates

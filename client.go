@@ -658,6 +658,18 @@ func (h *ResultsHandle) StreamSAST(ctx context.Context, scanID string, visibleCo
 	return h.reader.StreamSAST(ctx, scanID, visibleColumns, fn)
 }
 
+// StreamWithStats is [ResultsHandle.Stream] that also returns the delivered
+// count and the server's totalCount. See [wfresults.Reader.StreamWithStats].
+func (h *ResultsHandle) StreamWithStats(ctx context.Context, scanID string, fn func(json.RawMessage) error) (pagination.StreamStats, error) {
+	return h.reader.StreamWithStats(ctx, scanID, fn)
+}
+
+// StreamSASTWithStats is [ResultsHandle.StreamSAST] with the stats of
+// [ResultsHandle.StreamWithStats].
+func (h *ResultsHandle) StreamSASTWithStats(ctx context.Context, scanID string, visibleColumns []string, fn func(json.RawMessage) error) (pagination.StreamStats, error) {
+	return h.reader.StreamSASTWithStats(ctx, scanID, visibleColumns, fn)
+}
+
 // ReportsHandle wraps the reports workflow with method-style ergonomics.
 type ReportsHandle struct {
 	backend *wfreports.Backend
