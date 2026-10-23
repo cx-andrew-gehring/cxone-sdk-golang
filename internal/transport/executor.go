@@ -30,6 +30,11 @@ type Config struct {
 	Logger        observability.Logger
 	Metrics       observability.Metrics
 	Tracer        observability.Tracer
+
+	// RateLimitMaxWait opts in to retrying HTTP 429 inside RetryPolicy's
+	// attempt budget (see Executor.Do). 0 (the default) keeps CLAUDE.md §4.4:
+	// a 429 is returned to the caller at once.
+	RateLimitMaxWait time.Duration
 }
 
 // Executor is the SDK's single request funnel. CLAUDE.md §4.3 — every HTTP
@@ -77,6 +82,7 @@ func (e *Executor) Authenticator() auth.Authenticator { return e.cfg.Authenticat
 //     d. Send the HTTP request.
 //     e. On 401, refresh the token and retry once OFF the retry budget.
 //     f. On 5xx or transient transport error, log + metric + maybe retry.
+//     f2. Only with Config.RateLimitMaxWait > 0 (opt-in): 429, same way.
 //     g. On success or non-retryable status, run After interceptors and
 //        return the response to the caller.
 //
@@ -221,6 +227,18 @@ func (e *Executor) Do(ctx context.Context, req *Request) (*Response, error) {
 		span.SetAttribute("http.status_code", httpResp.StatusCode)
 		e.cfg.Metrics.IncRequest(ctx, req.Method, httpResp.StatusCode)
 
+		if wait, ok := e.rateLimitRetry(ctx, httpResp, attempt); ok {
+			drain(httpResp.Body)
+			e.logRetry(ctx, req, sanitizedURL, attempt, httpResp.StatusCode, nil)
+			e.cfg.Metrics.IncRetry(ctx, "status_429")
+			lastErr = &cxerrors.CommunicationError{
+				Method: req.Method, URL: sanitizedURL, StatusCode: httpResp.StatusCode,
+				Attempt: attempt, CorrelationID: e.cfg.CorrelationID,
+				RetryAfter: wait,
+			}
+			return retry.OutcomeRetry, retry.WithDelay(lastErr, wait)
+		}
+
 		switch retry.ClassifyStatus(httpResp.StatusCode) {
 		case retry.OutcomeSuccess:
 			e.runAfter(ctx, req, httpResp, nil)
@@ -276,6 +294,35 @@ func (e *Executor) Do(ctx context.Context, req *Request) (*Response, error) {
 		cancelTimeout()
 	}
 	return resp, nil
+}
+
+// rateLimitRetry decides whether a response is a 429 the opt-in retries
+// (Config.RateLimitMaxWait > 0). It returns the server's Retry-After (0 when
+// absent: the policy backoff applies) and true when:
+//   - the opt-in is on and the status is 429,
+//   - attempt is not the last one (the last 429 is returned to the caller
+//     unchanged, as with the opt-in off),
+//   - Retry-After is at most RateLimitMaxWait, and
+//   - Retry-After ends before ctx's deadline (waiting past it would turn a
+//     429 the caller can act on into a deadline error).
+//
+// Any method is retried: a 429 means the server rejected the request without
+// processing it, so re-sending a POST cannot duplicate its effect.
+func (e *Executor) rateLimitRetry(ctx context.Context, resp *Response, attempt int) (time.Duration, bool) {
+	if e.cfg.RateLimitMaxWait <= 0 || resp.StatusCode != http.StatusTooManyRequests {
+		return 0, false
+	}
+	if attempt >= e.cfg.RetryPolicy.MaxAttempts {
+		return 0, false
+	}
+	wait := retryAfter(resp.Header)
+	if wait > e.cfg.RateLimitMaxWait {
+		return 0, false
+	}
+	if dl, ok := ctx.Deadline(); ok && wait > 0 && time.Until(dl) <= wait {
+		return 0, false
+	}
+	return wait, true
 }
 
 // bodyWithCancel wraps a response body so closing it also releases the
