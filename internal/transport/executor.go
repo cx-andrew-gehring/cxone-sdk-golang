@@ -234,6 +234,7 @@ func (e *Executor) Do(ctx context.Context, req *Request) (*Response, error) {
 			lastErr = &cxerrors.CommunicationError{
 				Method: req.Method, URL: sanitizedURL, StatusCode: httpResp.StatusCode,
 				Attempt: attempt, CorrelationID: e.cfg.CorrelationID,
+				RetryAfter: retryAfter(httpResp.Header),
 			}
 			return retry.OutcomeRetry, lastErr
 

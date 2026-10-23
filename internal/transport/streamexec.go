@@ -102,6 +102,7 @@ func DoText(
 		StatusCode:    resp.StatusCode,
 		CorrelationID: resp.CorrelationID,
 		Reason:        reason,
+		RetryAfter:    retryAfter(resp.Header),
 	}
 }
 

@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"time"
 )
 
 // EndpointError is raised when the region or endpoint configuration is
@@ -66,6 +67,9 @@ type CommunicationError struct {
 	Attempt       int    // attempt number on which the request gave up (1-indexed)
 	CorrelationID string
 	Cause         error
+	// RetryAfter is the server's Retry-After (seconds or HTTP-date) on the
+	// final response, 0 when absent or unparseable.
+	RetryAfter time.Duration
 }
 
 func (e *CommunicationError) Error() string {
@@ -104,6 +108,11 @@ type ResponseError struct {
 	CorrelationID string
 	Reason        string
 	Cause         error
+	// RetryAfter is the server's Retry-After (seconds or HTTP-date), set on
+	// any non-success status that carried one (typically 429 or 503); 0 when
+	// absent or unparseable. A 429 is not retried by the funnel (CLAUDE.md
+	// §4.4), so callers that want to retry use this as the delay.
+	RetryAfter time.Duration
 }
 
 func (e *ResponseError) Error() string {
