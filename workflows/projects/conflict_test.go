@@ -17,7 +17,9 @@ import (
 // Body recorded on the canary (S5, 002-create-duplicate): HTTP 400, code 208.
 const duplicateBody = `{"code":208,"message":"Failed to create a project, project name 'acme' already exists","type":"ERROR"}`
 
-func init() { projects.SetConflictLookupBackoffForTest([]time.Duration{time.Millisecond, time.Millisecond, time.Millisecond}) }
+func init() {
+	projects.SetConflictLookupBackoffForTest([]time.Duration{time.Millisecond, time.Millisecond, time.Millisecond})
+}
 
 // The winner becomes visible only on the 3rd lookup after the duplicate 400
 // (eventual consistency): the bounded re-lookup finds it.
