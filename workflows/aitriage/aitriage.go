@@ -83,6 +83,10 @@ const (
 	StatusProposedNotExploitable = "PROPOSED_NOT_EXPLOITABLE"
 	StatusUncertain              = "UNCERTAIN"
 	StatusRiskAccepted           = "RISK_ACCEPTED"
+	// StatusConfirmed is not in the spec enum but the live service returns
+	// it as a terminal status (spike S1 policy run: IN_PROGRESS -> CONFIRMED,
+	// the finding's state went TO_VERIFY -> CONFIRMED).
+	StatusConfirmed = "CONFIRMED"
 )
 
 // Status returns the effective status string: the detail's triageStatus when
@@ -98,14 +102,25 @@ func (r *ResultInspector) Status() string {
 }
 
 // Done reports whether polling can stop: the status is terminal, i.e.
-// VULNERABLE, PROPOSED_NOT_EXPLOITABLE, UNCERTAIN, RISK_ACCEPTED or FAILED.
-// NOT_TRIAGED, IN_PROGRESS and unrecognised statuses are not done.
+// VULNERABLE, PROPOSED_NOT_EXPLOITABLE, UNCERTAIN, RISK_ACCEPTED, CONFIRMED
+// or FAILED. NOT_TRIAGED, IN_PROGRESS and unrecognised statuses are not done.
 func (r *ResultInspector) Done() bool {
 	switch r.Status() {
-	case StatusVulnerable, StatusProposedNotExploitable, StatusUncertain, StatusRiskAccepted, StatusFailed:
+	case StatusVulnerable, StatusProposedNotExploitable, StatusUncertain, StatusRiskAccepted, StatusConfirmed, StatusFailed:
 		return true
+	default:
+		return false
 	}
-	return false
+}
+
+// RawDetail returns the detail-shape body exactly as received, nil for the
+// jobStatus shape. Unlike re-encoding [ResultInspector.Detail], it keeps
+// unknown fields and false/empty values.
+func (r *ResultInspector) RawDetail() []byte {
+	if r.env == nil || r.env.RawDetail == nil {
+		return nil
+	}
+	return append([]byte(nil), r.env.RawDetail...)
 }
 
 // Failed reports whether the triage job failed (status FAILED, in either
@@ -118,10 +133,11 @@ func (r *ResultInspector) Failed() bool { return r.Status() == StatusFailed }
 func (r *ResultInspector) Unknown() bool {
 	switch r.Status() {
 	case "", StatusNotTriaged, StatusInProgress, StatusFailed, StatusVulnerable,
-		StatusProposedNotExploitable, StatusUncertain, StatusRiskAccepted:
+		StatusProposedNotExploitable, StatusUncertain, StatusRiskAccepted, StatusConfirmed:
 		return false
+	default:
+		return true
 	}
-	return true
 }
 
 // Detail returns the detail payload whenever the server returned the detail

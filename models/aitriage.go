@@ -161,6 +161,11 @@ type TriageResultEnvelope struct {
 	GroupID   string
 	JobStatus string
 	Detail    *TriageResultDetail
+	// RawDetail is the detail-shape body exactly as received (nil for the
+	// jobStatus shape). The typed Detail drops unknown fields and, through
+	// omitempty, false/empty values when re-encoded; pass-through consumers
+	// should store RawDetail instead.
+	RawDetail json.RawMessage
 }
 
 // UnmarshalJSON decodes either oneOf shape. Unknown fields are ignored.
@@ -189,6 +194,7 @@ func (e *TriageResultEnvelope) UnmarshalJSON(data []byte) error {
 		return errors.New("triage result: neither jobStatus nor detail (resultID/triageStatus) present")
 	}
 	e.Detail = &d
+	e.RawDetail = append(json.RawMessage(nil), bytes.TrimSpace(data)...)
 	if d.ProjectID != nil {
 		e.ProjectID = *d.ProjectID
 	}
