@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
+	"strings"
+	"time"
 
 	"github.com/checkmarx-open-labs/cxone-sdk-golang/cxerrors"
 	endpoints "github.com/checkmarx-open-labs/cxone-sdk-golang/internal/endpoints/projects"
@@ -33,17 +36,70 @@ func GetOrCreateByName(ctx context.Context, backend *Backend, template *models.P
 
 	created, err := endpoints.Create(ctx, backend.Executor, backend.BaseURL, template)
 	if err != nil {
+		if !isClientConflict(err) {
+			return nil, err
+		}
 		// Lost a create race (another caller created the same name between
-		// our lookup and create): on a 4xx conflict/duplicate, re-run the
-		// exact-name lookup once and return the winner.
-		if isClientConflict(err) {
-			if found, lerr := findProjectByName(ctx, backend, template.Name); lerr == nil && found != nil {
+		// our lookup and create). Re-run the exact-name lookup and return the
+		// winner. A confirmed duplicate (HTTP 400 "... already exists",
+		// measured on the canary) is retried a few times with a short
+		// backoff, because the winner may not be visible to the listing yet;
+		// any other 4xx gets a single re-lookup.
+		dup := isAlreadyExists(err)
+		tries := 1
+		if dup {
+			tries = len(conflictLookupBackoff)
+		}
+		for i := 0; i < tries; i++ {
+			if dup {
+				if serr := sleepCtx(ctx, conflictLookupBackoff[i]); serr != nil {
+					return nil, serr
+				}
+			}
+			found, lerr := findProjectByName(ctx, backend, template.Name)
+			if lerr == nil && found != nil {
 				return &ProjectRepoConfig{backend: backend, project: found}, nil
 			}
+			if cerr := ctx.Err(); cerr != nil {
+				return nil, cerr
+			}
+		}
+		if dup {
+			return nil, &cxerrors.ConflictError{Resource: "project", Name: template.Name, Cause: err}
 		}
 		return nil, err
 	}
 	return &ProjectRepoConfig{backend: backend, project: created}, nil
+}
+
+// conflictLookupBackoff is the delay before each exact-name re-lookup after a
+// duplicate-name create (3 tries, 3.5 s worst case in total).
+var conflictLookupBackoff = []time.Duration{500 * time.Millisecond, time.Second, 2 * time.Second}
+
+// isAlreadyExists reports whether err is the service's duplicate-name
+// rejection. Measured (spike S5): HTTP 400, body code 208, message
+// "Failed to create a project, project name '<name>' already exists". The
+// message text is the only discriminator; 409 is accepted too.
+func isAlreadyExists(err error) bool {
+	var re *cxerrors.ResponseError
+	if !errors.As(err, &re) {
+		return false
+	}
+	if re.StatusCode != http.StatusBadRequest && re.StatusCode != http.StatusConflict {
+		return false
+	}
+	return strings.Contains(strings.ToLower(re.Reason), "already exists")
+}
+
+func sleepCtx(ctx context.Context, d time.Duration) error {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-t.C:
+		return nil
+	}
 }
 
 // isClientConflict reports whether err is an HTTP 4xx rejection (the shape of

@@ -201,6 +201,26 @@ func (e *AuthError) Is(target error) bool          { return target == ErrAuth }
 func (e *CommunicationError) Is(target error) bool { return target == ErrCommunication }
 func (e *ResponseError) Is(target error) bool      { return target == ErrResponse }
 
+// ConflictError is returned by the get-or-create workflows when the create
+// was rejected because the name already exists, but bounded re-lookups did
+// not find the existing resource (for example the winner of a concurrent
+// create is not yet visible to the listing). Retrying the whole operation
+// later is expected to succeed. The originating *ResponseError stays
+// reachable through errors.As.
+type ConflictError struct {
+	Resource string // e.g. "project"
+	Name     string
+	Cause    error
+}
+
+func (e *ConflictError) Error() string {
+	return fmt.Sprintf("cxone: %s %q already exists but was not found by name lookup: %v", e.Resource, e.Name, e.Cause)
+}
+
+func (e *ConflictError) Unwrap() error { return e.Cause }
+
+var _ error = (*ConflictError)(nil)
+
 // TriageErrorKind classifies the documented AI Triage submit/retrieve
 // failures that callers commonly handle (ADR-010 fail-open policy).
 type TriageErrorKind string
