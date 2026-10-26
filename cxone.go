@@ -21,7 +21,7 @@ package cxone
 
 // Version is the SDK release version. It is reported in the User-Agent header
 // on every outgoing request and in tracing/span attributes.
-const Version = "0.10.1"
+const Version = "0.11.0"
 
 // productName is the SDK identifier embedded in the User-Agent header per
 // CLAUDE.md §4.2: "<agentName>/(CxOne <LangSDK>/<sdkVersion>)".
