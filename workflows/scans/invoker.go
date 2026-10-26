@@ -130,6 +130,19 @@ func (i *Invoker) WithConfigs(cfgs ...models.Config) *Invoker {
 	return i
 }
 
+// WithFusion enables Checkmarx Fusion with the given LLM model by appending
+// an "ai" config entry. An empty model is a *cxerrors.ConfigurationError from
+// Start. The model name is not validated here.
+func (i *Invoker) WithFusion(model string) *Invoker {
+	if model == "" {
+		if i.configErr == nil {
+			i.configErr = &cxerrors.ConfigurationError{Field: "Fusion", Reason: "model must not be empty"}
+		}
+		return i
+	}
+	return i.WithConfigs(models.AiConfig{FusionEnabled: "true", LLMModel: model}.Config())
+}
+
 // WithProjectTags sets project.tags in the scan request. NOTE: per the spec
 // this OVERWRITES the project's tags. Without this call project.tags is
 // omitted entirely. Multiple calls accumulate.
@@ -352,7 +365,7 @@ func (i *Invoker) buildUploadHandler(ctx context.Context) (json.RawMessage, erro
 // specConfigTypes is the config[].type enum from Scans_copy.yaml.
 var specConfigTypes = map[string]bool{
 	"sast": true, "sca": true, "kics": true, "apisec": true,
-	"containers": true, "microengines": true, "aisc": true,
+	"containers": true, "microengines": true, "aisc": true, "ai": true,
 }
 
 // normalizeEngine maps deprecated aliases to spec config types.
@@ -376,10 +389,15 @@ func (i *Invoker) assembleConfigs() ([]models.Config, error) {
 	seen := map[string]bool{}
 	add := func(field string, c models.Config) error {
 		if !specConfigTypes[c.Type] {
-			return &cxerrors.ConfigurationError{Field: field, Reason: "unknown config type " + quote(c.Type) + "; valid: sast, sca, kics, apisec, containers, microengines, aisc (scs is a deprecated alias for microengines)"}
+			return &cxerrors.ConfigurationError{Field: field, Reason: "unknown config type " + quote(c.Type) + "; valid: sast, sca, kics, apisec, containers, microengines, aisc, ai (scs is a deprecated alias for microengines)"}
 		}
 		if seen[c.Type] {
 			return &cxerrors.ConfigurationError{Field: field, Reason: "duplicate config type " + quote(c.Type)}
+		}
+		if c.Type == "ai" && c.Value["fusionEnabled"] == "true" {
+			if m, _ := c.Value["llmModel"].(string); m == "" {
+				return &cxerrors.ConfigurationError{Field: field, Reason: "ai config with fusionEnabled \"true\" requires llmModel"}
+			}
 		}
 		seen[c.Type] = true
 		for k, v := range c.Value {

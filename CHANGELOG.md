@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.11.0 (2026-10-26)
+
+### Added
+- `models.AiConfig` (with `Config()`) builds the typed `ai` config entry. The
+  scan Invoker accepts config type `ai`.
+- `Invoker.WithFusion(model)` enables Checkmarx Fusion for the scan with the
+  given LLM model. It appends `{"type":"ai","value":{"fusionEnabled":"true","llmModel":"<model>"}}`.
+- Invoker rule: an `ai` entry with `fusionEnabled:"true"` requires `llmModel`.
+  Without it the call returns a `ConfigurationError` before any HTTP call.
+- `cxerrors.InvalidLLMError` (alias `cxone.InvalidLLMError`) is returned when
+  CxOne answers `POST /api/scans` with HTTP 400 and error code 209.
+- `ResponseError.ErrorCode` and `ResponseError.ServerMessage` are filled from
+  the JSON error body (`code` and `message`).
+
+### Notes
+- The Fusion model is chosen only through the separate `ai` config entry, for
+  example `{"type":"ai","value":{"fusionEnabled":"true","llmModel":"haiku-4.5"}}`.
+  It is NOT chosen through `pansophiaEnabled` or `llmModel` on the `sast` entry.
+- Known models today are `haiku-4.5` and `opus-4.7`. The SDK does not validate
+  model names. CxOne rejects an unknown name with error code 209
+  (`InvalidLLMError`).
+- When no `ai` entry is sent, CxOne enables Fusion itself with its own default model.
+
 ## v0.10.1 (2026-10-23)
 
 ### Changed (breaking: import path)
