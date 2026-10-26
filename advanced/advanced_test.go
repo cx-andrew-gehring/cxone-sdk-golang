@@ -19,6 +19,12 @@ import (
 // auth → executor → endpoint chain end-to-end.
 func newClientAgainst(t *testing.T, api http.HandlerFunc) *cxone.Client {
 	t.Helper()
+	return newClientAgainstWith(t, api, nil)
+}
+
+// newClientAgainstWith is newClientAgainst with an optional builder tweak.
+func newClientAgainstWith(t *testing.T, api http.HandlerFunc, tweak func(*cxone.ClientBuilder)) *cxone.Client {
+	t.Helper()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/auth/realms/acme/protocol/openid-connect/token", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -37,13 +43,16 @@ func newClientAgainst(t *testing.T, api http.HandlerFunc) *cxone.Client {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := cxone.NewClient().
+	b := cxone.NewClient().
 		Region(region).
 		Tenant("acme").
 		AgentName("test-agent").
 		APIKey("dummy-refresh-token").
-		HTTPClient(srv.Client()).
-		Build()
+		HTTPClient(srv.Client())
+	if tweak != nil {
+		tweak(b)
+	}
+	c, err := b.Build()
 	if err != nil {
 		t.Fatal(err)
 	}
