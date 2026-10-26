@@ -108,7 +108,10 @@ func DoJSON(
 	// still authoritative.
 	reason := fmt.Sprintf("unexpected status %d", resp.StatusCode)
 	var em models.ErrorModel
-	if len(bodyBytes) > 0 && json.Unmarshal(bodyBytes, &em) == nil && em.Message != "" {
+	if len(bodyBytes) > 0 && json.Unmarshal(bodyBytes, &em) != nil {
+		em = models.ErrorModel{}
+	}
+	if em.Message != "" {
 		reason = fmt.Sprintf("status %d: %s", resp.StatusCode, em.Message)
 	}
 	return &cxerrors.ResponseError{
@@ -118,6 +121,8 @@ func DoJSON(
 		CorrelationID: resp.CorrelationID,
 		Reason:        reason,
 		RetryAfter:    retryAfter(resp.Header),
+		ErrorCode:     em.Code,
+		ServerMessage: em.Message,
 	}
 }
 

@@ -113,6 +113,10 @@ type ResponseError struct {
 	// absent or unparseable. A 429 is not retried by the funnel (CLAUDE.md
 	// §4.4), so callers that want to retry use this as the delay.
 	RetryAfter time.Duration
+	// ErrorCode and ServerMessage are the "code" and "message" of the JSON
+	// error envelope CxOne returned, when the body carried one (0 / "" else).
+	ErrorCode     int
+	ServerMessage string
 }
 
 func (e *ResponseError) Error() string {
@@ -123,6 +127,27 @@ func (e *ResponseError) Error() string {
 }
 
 func (e *ResponseError) Unwrap() error { return e.Cause }
+
+// InvalidLLMErrorCode is the CxOne error code (HTTP 400) for a Fusion scan
+// whose requested LLM is not valid.
+const InvalidLLMErrorCode = 209
+
+// InvalidLLMError is returned when CxOne rejects a scan-create request because
+// the requested Fusion LLM model is not valid (HTTP 400, code 209). It is not
+// retried. The originating *ResponseError stays reachable through errors.As.
+type InvalidLLMError struct {
+	Message       string // the server's message, e.g. "LLM is not valid for fusion scan"
+	CorrelationID string
+	Cause         error
+}
+
+func (e *InvalidLLMError) Error() string {
+	return fmt.Sprintf("cxone: invalid LLM for scan: %s (correlationId=%s)", e.Message, e.CorrelationID)
+}
+
+func (e *InvalidLLMError) Unwrap() error { return e.Cause }
+
+var _ error = (*InvalidLLMError)(nil)
 
 // ScanError is raised when a high-level scan workflow surfaces a scan-specific
 // failure (invalid configuration, scan ended in a failed state when callers

@@ -10,10 +10,12 @@ package scans
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/url"
 	"strconv"
 
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/cxerrors"
 	"github.com/cx-andrew-gehring/cxone-sdk-golang/internal/transport"
 	"github.com/cx-andrew-gehring/cxone-sdk-golang/models"
 	"github.com/cx-andrew-gehring/cxone-sdk-golang/pagination"
@@ -29,6 +31,14 @@ func Create(ctx context.Context, e *transport.Executor, baseURL string, in *mode
 	if err := transport.DoJSON(ctx, e, http.MethodPost,
 		transport.JoinURL(baseURL, Path),
 		nil, in, []int{http.StatusCreated}, &out); err != nil {
+		// CxOne answers a Fusion scan with an unknown LLM as 400 code 209.
+		var respErr *cxerrors.ResponseError
+		if errors.As(err, &respErr) && respErr.StatusCode == http.StatusBadRequest &&
+			respErr.ErrorCode == cxerrors.InvalidLLMErrorCode {
+			return nil, &cxerrors.InvalidLLMError{
+				Message: respErr.ServerMessage, CorrelationID: respErr.CorrelationID, Cause: respErr,
+			}
+		}
 		return nil, err
 	}
 	return &out, nil

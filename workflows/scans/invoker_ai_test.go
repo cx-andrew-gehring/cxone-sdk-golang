@@ -4,11 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"net/http"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/cx-andrew-gehring/cxone-sdk-golang/cxerrors"
 	"github.com/cx-andrew-gehring/cxone-sdk-golang/models"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/workflows/projects"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/workflows/scans"
 )
 
 func TestAiConfig_JSON(t *testing.T) {
@@ -97,4 +102,37 @@ func TestInvoker_WithFusion(t *testing.T) {
 	mk2, _, hits := captureScan(t)
 	_, err := mk2().ForBranch("main").WithFusion("").Start(context.Background())
 	wantConfigErr(t, err, hits)
+}
+
+func TestInvoker_Start_InvalidLLM_GitAndUpload(t *testing.T) {
+	var hits int32
+	var srvURL string
+	b, pb, client := newScanBackends(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api/uploads":
+			_, _ = io.WriteString(w, `{"url":"`+srvURL+`/u/abc"}`)
+		case r.Method == http.MethodPut:
+			w.WriteHeader(http.StatusOK)
+		case r.URL.Path == "/api/scans":
+			atomic.AddInt32(&hits, 1)
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = io.WriteString(w, `{"message":"LLM is not valid for fusion scan","type":"ERROR","code":209}`)
+		}
+	})
+	srvURL = strings.TrimSuffix(b.BaseURL, "/")
+	repo, _ := projects.FromProjectModel(pb, &models.ProjectResponseModel{ID: "p1", RepoURL: "https://x/y.git", MainBranch: "main"})
+
+	_, err := scans.NewInvoker(b, repo, client).ForBranch("main").WithFusion("nope").Start(context.Background())
+	var le *cxerrors.InvalidLLMError
+	if !errors.As(err, &le) {
+		t.Fatalf("git mode: want InvalidLLMError, got %v", err)
+	}
+	_, err = scans.NewInvoker(b, repo, client).WithEngines("sast").WithFusion("nope").
+		WithUploadReader(strings.NewReader("zip"), 3).Start(context.Background())
+	if !errors.As(err, &le) {
+		t.Fatalf("upload mode: want InvalidLLMError, got %v", err)
+	}
+	if hits != 2 {
+		t.Errorf("hits = %d", hits)
+	}
 }

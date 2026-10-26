@@ -21,4 +21,5 @@ type (
 	ConfigurationError = cxerrors.ConfigurationError
 	ReportError        = cxerrors.ReportError
 	ConflictError      = cxerrors.ConflictError
+	InvalidLLMError    = cxerrors.InvalidLLMError
 )

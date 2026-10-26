@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/cx-andrew-gehring/cxone-sdk-golang/cxerrors"
@@ -167,5 +168,78 @@ func TestScanTagsErrorOnBadStatus(t *testing.T) {
 	var respErr *cxerrors.ResponseError
 	if !errors.As(err, &commErr) && !errors.As(err, &respErr) {
 		t.Fatalf("expected CommunicationError or ResponseError, got %T: %v", err, err)
+	}
+}
+
+func newRetryingExecutor(t *testing.T, h http.HandlerFunc) (*transport.Executor, string) {
+	t.Helper()
+	srv := httptest.NewServer(h)
+	t.Cleanup(srv.Close)
+	exec := transport.NewExecutor(transport.Config{
+		HTTPClient:    srv.Client(),
+		Authenticator: stubAuth{},
+		UserAgent:     "test/(CxOne GoSDK/0.0.0-test)",
+		CorrelationID: "corr",
+		RetryPolicy:   retry.Policy{MaxAttempts: 3, MaxDelay: 0},
+	})
+	return exec, srv.URL + "/"
+}
+
+func TestCreateScan_Code209IsInvalidLLMError(t *testing.T) {
+	var hits int32
+	exec, base := newRetryingExecutor(t, func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = io.WriteString(w, `{"message":"LLM is not valid for fusion scan","type":"ERROR","code":209}`)
+	})
+	_, err := scans.Create(context.Background(), exec, base, &models.Scan{Type: "git"})
+	var le *cxerrors.InvalidLLMError
+	if !errors.As(err, &le) {
+		t.Fatalf("want InvalidLLMError, got %T %v", err, err)
+	}
+	if le.Message != "LLM is not valid for fusion scan" || le.CorrelationID != "corr" {
+		t.Errorf("got %+v", le)
+	}
+	var re *cxerrors.ResponseError
+	if !errors.As(err, &re) || re.StatusCode != 400 {
+		t.Errorf("ResponseError not reachable: %v", err)
+	}
+	if n := atomic.LoadInt32(&hits); n != 1 {
+		t.Errorf("hits = %d, want 1 (no retry)", n)
+	}
+}
+
+func TestCreateScan_Other400IsNotInvalidLLM(t *testing.T) {
+	for name, body := range map[string]string{
+		"code208":  `{"message":"other","type":"ERROR","code":208}`,
+		"non-json": `<html>bad</html>`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			exec, base := newRetryingExecutor(t, func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = io.WriteString(w, body)
+			})
+			_, err := scans.Create(context.Background(), exec, base, &models.Scan{Type: "git"})
+			var le *cxerrors.InvalidLLMError
+			if errors.As(err, &le) {
+				t.Fatalf("unexpected InvalidLLMError: %v", err)
+			}
+			var re *cxerrors.ResponseError
+			if !errors.As(err, &re) || re.StatusCode != 400 {
+				t.Errorf("want ResponseError 400, got %T %v", err, err)
+			}
+		})
+	}
+}
+
+func TestOtherEndpoint209IsNotInvalidLLM(t *testing.T) {
+	exec, base := newRetryingExecutor(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = io.WriteString(w, `{"message":"LLM is not valid for fusion scan","code":209}`)
+	})
+	_, err := scans.Get(context.Background(), exec, base, "s1")
+	var le *cxerrors.InvalidLLMError
+	if errors.As(err, &le) {
+		t.Fatalf("GET must not map 209: %v", err)
 	}
 }
