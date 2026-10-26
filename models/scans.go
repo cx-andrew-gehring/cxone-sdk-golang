@@ -174,6 +174,27 @@ type SastConfig struct {
 	RecommendedExclusions string `json:"recommendedExclusions,omitempty"`
 }
 
+// AiConfig holds the "ai" scan config entry (Checkmarx Fusion). Values are
+// strings on the wire. Model names are not validated here; Checkmarx One
+// does that.
+type AiConfig struct {
+	FusionEnabled string `json:"fusionEnabled,omitempty"`
+	LLMModel      string `json:"llmModel,omitempty"`
+}
+
+// Config converts the AiConfig to a config[] entry of type "ai", omitting
+// empty fields.
+func (c AiConfig) Config() Config {
+	v := map[string]any{}
+	if c.FusionEnabled != "" {
+		v["fusionEnabled"] = c.FusionEnabled
+	}
+	if c.LLMModel != "" {
+		v["llmModel"] = c.LLMModel
+	}
+	return Config{Type: "ai", Value: v}
+}
+
 // KicsConfig holds the KICS (IaC) engine config.
 type KicsConfig struct {
 	Filter    string `json:"filter,omitempty"`
