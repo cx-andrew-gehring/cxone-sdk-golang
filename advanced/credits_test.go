@@ -2,8 +2,10 @@ package advanced_test
 
 import (
 	"context"
+	_ "embed"
 	"errors"
 	"io"
+	"math/big"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -14,9 +16,12 @@ import (
 	"github.com/cx-andrew-gehring/cxone-sdk-golang/models"
 )
 
+//go:embed testdata/credits_consumption_real.json
+var creditsRealShape string
+
 const (
-	creditsPage1 = `{"items":[{"name":"user-a","creditsUsed":"1.5","percentOfTotal":6.8,"actionsPerformed":{"triage":1,"haiku-4.5":2},"newField":true}],"totalItems":2,"totalPages":2,"currentPage":1}`
-	creditsPage2 = `{"items":[{"name":"user-b","creditsUsed":"20","percentOfTotal":93.2,"actionsPerformed":{"remediation":6}}],"totalItems":2,"totalPages":2,"currentPage":2}`
+	creditsPage1 = `{"items":[{"name":"user-a","creditsUsed":"1.5","percentOfTotal":6.8,"actionsPerformed":{"actions":[{"actionType":"triage","transactionCount":1},{"actionType":"haiku-4.5","transactionCount":2}],"total":3},"newField":true}],"totalItems":2,"totalPages":2,"currentPage":1}`
+	creditsPage2 = `{"items":[{"name":"user-b","creditsUsed":"20","percentOfTotal":93.2,"actionsPerformed":{"actions":[{"actionType":"remediation","transactionCount":6}],"total":6}}],"totalItems":2,"totalPages":2,"currentPage":2}`
 )
 
 // fastFail makes 5xx fail quickly: one attempt, no backoff.
@@ -52,7 +57,7 @@ func TestCreditsConsumptionSinglePage(t *testing.T) {
 		t.Fatal(err)
 	}
 	it := p.Items[0]
-	if it.Name != "user-a" || it.CreditsUsed != "1.5" || it.ActionsPerformed["haiku-4.5"].String() != "2" || p.TotalPages != 2 || p.CurrentPage != 1 {
+	if it.Name != "user-a" || it.CreditsUsed != "1.5" || it.ActionsPerformed.Actions[1].TransactionCount.String() != "2" || it.ActionsPerformed.Total.String() != "3" || p.TotalPages != 2 || p.CurrentPage != 1 {
 		t.Errorf("page = %+v", p)
 	}
 }
@@ -144,5 +149,52 @@ func TestCreditsActionRatesRaw(t *testing.T) {
 	raw, err := c.Advanced().Credits().ActionRates(context.Background())
 	if err != nil || path != "/api/v1/credits/action-rates" || !strings.Contains(string(raw), `"triage":1`) {
 		t.Fatalf("raw=%s path=%s err=%v", raw, path, err)
+	}
+}
+
+func TestCreditsConsumptionRealShape(t *testing.T) {
+	c := newClientAgainst(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, creditsRealShape)
+	})
+	p, err := c.Advanced().Credits().Consumption(context.Background(), models.CreditConsumptionQuery{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := p.Items[1]
+	ap := b.ActionsPerformed
+	if len(p.Items) != 2 || b.CreditsUsed != "20.5" || ap.Total.String() != "12" || len(ap.Actions) != 3 ||
+		ap.Actions[0].ActionType != "fusion_scan_-_haiku_4.5" || ap.Actions[0].TransactionCount.String() != "9" {
+		t.Errorf("page = %+v", p)
+	}
+}
+
+func TestCreditsConsumptionAllRealShapeSums(t *testing.T) {
+	c := newClientAgainst(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, creditsRealShape)
+	})
+	items, err := c.Advanced().Credits().ConsumptionAll(context.Background(), models.CreditConsumptionQuery{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := new(big.Rat)
+	for _, it := range items {
+		r, ok := new(big.Rat).SetString(it.CreditsUsed)
+		if !ok {
+			t.Fatalf("bad creditsUsed %q", it.CreditsUsed)
+		}
+		sum.Add(sum, r)
+	}
+	if sum.FloatString(1) != "24.5" {
+		t.Errorf("sum = %s", sum.FloatString(1))
+	}
+}
+
+func TestCreditsConsumptionOddActionsPerformedKeepsCredits(t *testing.T) {
+	c := newClientAgainst(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, `{"items":[{"name":"user-a","creditsUsed":"1.5","actionsPerformed":null},{"name":"user-b","creditsUsed":"2","actionsPerformed":{"triage":1}},{"name":"user-c","creditsUsed":"3","actionsPerformed":{"total":"x"}}],"totalItems":3,"totalPages":1,"currentPage":1}`)
+	})
+	items, err := c.Advanced().Credits().ConsumptionAll(context.Background(), models.CreditConsumptionQuery{})
+	if err != nil || len(items) != 3 || items[0].CreditsUsed != "1.5" || items[1].CreditsUsed != "2" || items[2].CreditsUsed != "3" {
+		t.Fatalf("items=%+v err=%v", items, err)
 	}
 }

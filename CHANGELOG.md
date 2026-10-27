@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.12.1 (2026-10-27)
+
+### Fixed
+- `GET /api/v1/credits/consumption` failed against the real service with
+  `json: cannot unmarshal array into Go value of type json.Number`:
+  `actionsPerformed` is an object holding an array
+  (`{"actions":[{"actionType":"triage","transactionCount":4}],"total":4}`), not
+  a map of counts. It is now the typed `models.CreditActionsPerformed`
+  (`Actions []CreditActionCount`, `Total json.Number`), with
+  `CreditActionCount{ActionType string; TransactionCount json.Number}`.
+- The sub-object is informational, so it decodes tolerantly: any unexpected
+  shape (null, `{}`, a string, the old map of numbers, a non-numeric total)
+  leaves the zero value for that part and never fails the decode or loses
+  `creditsUsed`. `creditsUsed` remains a decimal string.
+
+### Changed (breaking)
+- The type of `models.CreditConsumptionItem.ActionsPerformed` changed from
+  `map[string]json.Number` to the struct `CreditActionsPerformed`. v0.12.0 was
+  unusable against the real service and has a single known consumer, so the
+  break is accepted in a patch release.
+
 ## v0.12.0 (2026-10-26)
 
 ### Added
@@ -13,7 +34,7 @@
   - `ActionRates(ctx)` returns the raw JSON body of
     `GET /api/v1/credits/action-rates` (`json.RawMessage`, shape unconfirmed).
 - `models.CreditConsumptionItem.CreditsUsed` is a decimal string and is never
-  converted to a float. `ActionsPerformed` is `map[string]json.Number`.
+  converted to a float. `ActionsPerformed` was `map[string]json.Number` (wrong, fixed in v0.12.1).
   Unknown response fields are ignored.
 
 ### Notes
