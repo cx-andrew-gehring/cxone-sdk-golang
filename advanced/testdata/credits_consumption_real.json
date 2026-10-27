@@ -1,0 +1,4 @@
+{"items":[
+ {"name":"user-a","creditsUsed":"4","percentOfTotal":1.0,"actionsPerformed":{"actions":[{"actionType":"triage","transactionCount":4}],"total":4}},
+ {"name":"user-b","creditsUsed":"20.5","percentOfTotal":5.2,"actionsPerformed":{"actions":[{"actionType":"fusion_scan_-_haiku_4.5","transactionCount":9},{"actionType":"fusion_scan_-_opus_4.7","transactionCount":2},{"actionType":"fusion_scan_-_opus_5.5","transactionCount":1}],"total":12}}
+ ],"totalItems":2,"totalPages":1,"currentPage":1}

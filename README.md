@@ -310,7 +310,7 @@ items, err := credits.ConsumptionAll(ctx, models.CreditConsumptionQuery{Limit: 1
 rates, _ := credits.ActionRates(ctx) // json.RawMessage
 ```
 
-`CreditsUsed` is a decimal string; parse it exactly (for example `math/big`).
+`CreditsUsed` is a decimal string; parse it exactly (for example `math/big`). `ActionsPerformed` is a typed, informational breakdown (`Actions`, `Total`) that decodes tolerantly: an unexpected shape leaves zero values and never fails the call.
 
 ### Audit Sessions
 
