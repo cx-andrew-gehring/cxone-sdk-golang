@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.12.0 (2026-10-26)
+
+### Added
+- `Advanced().Credits()` with read access to two credits endpoints that
+  Checkmarx does not document (shapes observed live):
+  - `Consumption(ctx, models.CreditConsumptionQuery)` returns one typed page of
+    `GET /api/v1/credits/consumption` (`models.CreditConsumptionPage`).
+  - `ConsumptionAll(ctx, query)` walks every page (driven by `totalPages`) and
+    returns all items; on any page error it returns `nil` and the error, never
+    a partial list.
+  - `ActionRates(ctx)` returns the raw JSON body of
+    `GET /api/v1/credits/action-rates` (`json.RawMessage`, shape unconfirmed).
+- `models.CreditConsumptionItem.CreditsUsed` is a decimal string and is never
+  converted to a float. `ActionsPerformed` is `map[string]json.Number`.
+  Unknown response fields are ignored.
+
+### Notes
+- The paging query parameters are not confirmed. They default to `page` and
+  `limit` (first page `1`) and can be overridden with
+  `CreditConsumptionQuery.PageParam`, `LimitParam` and `FirstPage`.
+  `ConsumptionAll` fails if a response's `currentPage` differs from the page
+  requested, so a wrong guess cannot silently skip pages.
+
 ## v0.11.0 (2026-10-26)
 
 ### Added

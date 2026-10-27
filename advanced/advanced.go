@@ -32,6 +32,7 @@ import (
 	"github.com/cx-andrew-gehring/cxone-sdk-golang/internal/endpoints/audit"
 	"github.com/cx-andrew-gehring/cxone-sdk-golang/internal/endpoints/bfl"
 	iamclients "github.com/cx-andrew-gehring/cxone-sdk-golang/internal/endpoints/clients"
+	"github.com/cx-andrew-gehring/cxone-sdk-golang/internal/endpoints/credits"
 	"github.com/cx-andrew-gehring/cxone-sdk-golang/internal/endpoints/export"
 	"github.com/cx-andrew-gehring/cxone-sdk-golang/internal/endpoints/featureflags"
 	"github.com/cx-andrew-gehring/cxone-sdk-golang/internal/endpoints/groups"
@@ -179,6 +180,9 @@ func (h *Handle) Analytics() *Analytics { return &Analytics{h: h} }
 
 // Audit returns a typed handle to the query-editor (audit) session endpoints.
 func (h *Handle) Audit() *Audit { return &Audit{h: h} }
+
+// Credits returns a typed handle to the (undocumented) credits endpoints.
+func (h *Handle) Credits() *Credits { return &Credits{h: h} }
 
 // Migration returns a typed handle to the data-import (migration) endpoints.
 func (h *Handle) Migration() *Migration { return &Migration{h: h} }
@@ -1086,4 +1090,28 @@ func (a *Access) ListAMRoles(ctx context.Context) ([]models.AMRole, error) {
 
 func (p *Projects) MoveApplications(ctx context.Context, projectID string, fromAppIDs, toAppIDs []string) error {
 	return projects.MoveApplications(ctx, p.h.executor, p.h.rootURL, projectID, fromAppIDs, toAppIDs)
+}
+
+// ----- Credits ---------------------------------------------------------------
+
+// Credits wraps the credits endpoints (GET /api/v1/credits/...). Both are
+// undocumented by Checkmarx; their shapes were observed live.
+type Credits struct{ h *Handle }
+
+// Consumption returns one page of per-user credit consumption.
+func (c *Credits) Consumption(ctx context.Context, q models.CreditConsumptionQuery) (*models.CreditConsumptionPage, error) {
+	return credits.Consumption(ctx, c.h.executor, c.h.rootURL, q)
+}
+
+// ConsumptionAll returns the items of every page. If any page fails it returns
+// (nil, err) and never a partial list, so a caller summing creditsUsed cannot
+// under-count.
+func (c *Credits) ConsumptionAll(ctx context.Context, q models.CreditConsumptionQuery) ([]models.CreditConsumptionItem, error) {
+	return credits.ConsumptionAll(ctx, c.h.executor, c.h.rootURL, q)
+}
+
+// ActionRates returns the raw JSON body of the credits-per-action endpoint
+// (its shape is not yet confirmed, so it is not decoded).
+func (c *Credits) ActionRates(ctx context.Context) (json.RawMessage, error) {
+	return credits.ActionRates(ctx, c.h.executor, c.h.rootURL)
 }

@@ -302,6 +302,16 @@ mttr, _ := analytics.MeanTimeToResolution(ctx, models.AnalyticsFilter{})
 common, _ := analytics.MostCommonVulnerabilities(ctx, 10, models.AnalyticsFilter{})
 ```
 
+### Credits (undocumented endpoints)
+
+```go
+credits := client.Advanced().Credits()
+items, err := credits.ConsumptionAll(ctx, models.CreditConsumptionQuery{Limit: 100}) // nil + error if any page fails
+rates, _ := credits.ActionRates(ctx) // json.RawMessage
+```
+
+`CreditsUsed` is a decimal string; parse it exactly (for example `math/big`).
+
 ### Audit Sessions
 
 ```go
