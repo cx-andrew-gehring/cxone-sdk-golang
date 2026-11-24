@@ -45,6 +45,8 @@ type Invoker struct {
 	commit       string
 	engines      []string
 	tags         map[string]string
+	baseBranch   string            // sast config baseBranch (PR target branch)
+	sourceOrigin string            // request-level sourceOrigin
 	projectTags  map[string]string // nil unless WithProjectTags (overwrites project tags server-side)
 	extraConfigs []models.Config   // WithConfigs passthrough
 	sastConfig   *models.SastConfig
@@ -189,6 +191,22 @@ func (i *Invoker) WithTags(tags map[string]string) *Invoker {
 	return i
 }
 
+// WithBaseBranch sets the SAST config's baseBranch (the PR target branch) so
+// results can be computed as a diff against it. It is valid only when the
+// SAST engine is selected (via WithEngines or a "sast" WithConfigs entry);
+// otherwise Start returns a *cxerrors.ConfigurationError. It overrides any
+// BaseBranch set through WithSastConfig.
+func (i *Invoker) WithBaseBranch(branch string) *Invoker {
+	i.baseBranch = branch
+	return i
+}
+
+// WithSourceOrigin sets the request's sourceOrigin label (e.g. "PR Webhook").
+func (i *Invoker) WithSourceOrigin(origin string) *Invoker {
+	i.sourceOrigin = origin
+	return i
+}
+
 // WithSastConfig overrides the SAST engine configuration for this scan
 // (preset name, fast-scan mode, light queries, etc.). The platform's
 // project-level configuration is used for any field left unset.
@@ -276,6 +294,8 @@ func (i *Invoker) Start(ctx context.Context) (*ScanInspector, error) {
 		Project: models.ScanProject{ID: i.repo.ID(), Tags: i.projectTags},
 		Tags:    i.tags,
 		Config:  i.configs,
+
+		SourceOrigin: i.sourceOrigin,
 	}
 
 	resp, err := endpoints.Create(ctx, i.backend.Executor, i.backend.BaseURL, scanReq)
@@ -432,6 +452,24 @@ func (i *Invoker) assembleConfigs() ([]models.Config, error) {
 	for _, c := range i.extraConfigs {
 		if err := add("Configs", c); err != nil {
 			return nil, err
+		}
+	}
+	if i.baseBranch != "" {
+		found := false
+		for idx := range out {
+			if out[idx].Type != "sast" {
+				continue
+			}
+			found = true
+			v := make(map[string]any, len(out[idx].Value)+1)
+			for k, val := range out[idx].Value {
+				v[k] = val
+			}
+			v["baseBranch"] = i.baseBranch
+			out[idx].Value = v
+		}
+		if !found {
+			return nil, &cxerrors.ConfigurationError{Field: "BaseBranch", Reason: "is only valid when the sast engine is enabled"}
 		}
 	}
 	return out, nil

@@ -8,6 +8,11 @@
   a scan. A scan with no policies assigned yields `BreakBuild == false`.
 - `Client.Policies()` returns a `PoliciesHandle` with `Evaluate(ctx, scanID)`,
   making the workflow usable from outside the module.
+- `scans.Invoker`: `WithBaseBranch(branch)` sets the SAST config `baseBranch`
+  (PR target branch, for diff results; requires the SAST engine, else a
+  `*cxerrors.ConfigurationError`) and `WithSourceOrigin(origin)` sets the
+  request `sourceOrigin`. `models.SastConfig.BaseBranch` and
+  `models.Scan.SourceOrigin` added.
 
 ## v0.12.1 (2026-10-27)
 

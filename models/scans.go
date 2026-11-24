@@ -158,6 +158,8 @@ type Scan struct {
 	Project ScanProject       `json:"project,omitempty"`
 	Config  []Config          `json:"config,omitempty"`
 	Tags    map[string]string `json:"tags,omitempty"`
+	// SourceOrigin labels what initiated the scan (e.g. "PR Webhook").
+	SourceOrigin string `json:"sourceOrigin,omitempty"`
 }
 
 // SastConfig holds the SAST engine config for a scan request. Booleans are
@@ -172,6 +174,9 @@ type SastConfig struct {
 	FastScanMode          string `json:"fastScanMode,omitempty"`
 	LightQueries          string `json:"lightQueries,omitempty"`
 	RecommendedExclusions string `json:"recommendedExclusions,omitempty"`
+	// BaseBranch is the branch results are diffed against (a PR's target
+	// branch), as CxOne's native PR integration sets it.
+	BaseBranch string `json:"baseBranch,omitempty"`
 }
 
 // AiConfig holds the "ai" scan config entry (Checkmarx Fusion). Values are

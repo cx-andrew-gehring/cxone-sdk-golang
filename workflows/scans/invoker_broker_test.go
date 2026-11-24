@@ -235,3 +235,74 @@ func TestScanHandlerJSONKeepsCredentialsWhenSet(t *testing.T) {
 		t.Errorf("got %s", b)
 	}
 }
+
+func sastCfg(t *testing.T, raw string) map[string]any {
+	t.Helper()
+	var got struct {
+		Config []models.Config `json:"config"`
+	}
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range got.Config {
+		if c.Type == "sast" {
+			return c.Value
+		}
+	}
+	t.Fatalf("no sast config in %s", raw)
+	return nil
+}
+
+func TestInvokerSendsBaseBranchInSastConfig(t *testing.T) {
+	mk, raw, _ := captureScan(t)
+	_, err := mk().ForBranch("feature").WithEngines("sast", "sca").
+		WithSastConfig(models.SastConfig{PresetName: "Checkmarx Default"}).
+		WithBaseBranch("main").Start(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := sastCfg(t, *raw)
+	if v["baseBranch"] != "main" || v["presetName"] != "Checkmarx Default" {
+		t.Errorf("sast value = %v", v)
+	}
+}
+
+func TestInvokerBaseBranchWithoutSastConfigStruct(t *testing.T) {
+	mk, raw, _ := captureScan(t)
+	if _, err := mk().ForBranch("f").WithEngines("sast").WithBaseBranch("main").Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if v := sastCfg(t, *raw); v["baseBranch"] != "main" {
+		t.Errorf("sast value = %v", v)
+	}
+}
+
+func TestInvokerBaseBranchRequiresSast(t *testing.T) {
+	mk, _, hits := captureScan(t)
+	_, err := mk().ForBranch("f").WithEngines("sca").WithBaseBranch("main").Start(context.Background())
+	wantConfigErr(t, err, hits)
+}
+
+func TestInvokerSendsSourceOrigin(t *testing.T) {
+	mk, raw, _ := captureScan(t)
+	if _, err := mk().ForBranch("f").WithEngines("sast").WithSourceOrigin("PR Webhook").Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal([]byte(*raw), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got["sourceOrigin"] != "PR Webhook" {
+		t.Errorf("body = %s", *raw)
+	}
+}
+
+func TestInvokerOmitsSourceOriginByDefault(t *testing.T) {
+	mk, raw, _ := captureScan(t)
+	if _, err := mk().ForBranch("f").WithEngines("sast").Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(*raw, "sourceOrigin") || strings.Contains(*raw, "baseBranch") {
+		t.Errorf("unexpected fields in %s", *raw)
+	}
+}
