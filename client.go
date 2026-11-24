@@ -668,6 +668,21 @@ func (h *ScansHandle) ListForProject(ctx context.Context, projectID string) ([]*
 	return out, nil
 }
 
+// Cancel asks the platform to stop a scan (PATCH /api/scans/{id}
+// {"status":"Canceled"}). It is idempotent: an unknown scan (404) or one that
+// has already finished (409) counts as success.
+func (h *ScansHandle) Cancel(ctx context.Context, scanID string) error {
+	if scanID == "" {
+		return &ConfigurationError{Field: "scanID", Reason: "is required"}
+	}
+	err := scansep.Cancel(ctx, h.backend.Executor, h.backend.BaseURL, scanID)
+	var re *ResponseError
+	if errors.As(err, &re) && (re.StatusCode == http.StatusNotFound || re.StatusCode == http.StatusConflict) {
+		return nil
+	}
+	return err
+}
+
 // NewScan returns a fluent builder for starting a new scan against the
 // supplied project. The builder is bound to the client's HTTP client so
 // upload-mode scans can use the shared connection pool.

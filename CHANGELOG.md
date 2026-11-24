@@ -3,6 +3,8 @@
 ## Unreleased
 
 ### Added
+- `Client.Scans().Cancel(ctx, scanID)` cancels a scan (PATCH `{"status":"Canceled"}`);
+  idempotent: 404 (unknown) and 409 (already finished) return nil.
 - `workflows/scans`: `LatestCompleted(ctx, *Backend, projectID, branch)` returns the
   newest Completed scan (nil, nil when none; never Running/Queued/Failed/Partial)
   and `NewFindings(ctx, *Backend, oldScanID, newScanID, perEngineCap, ...CompareOption)`
