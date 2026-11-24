@@ -682,6 +682,19 @@ func (h *ScansHandle) Compare(ctx context.Context, oldScanID, newScanID string, 
 	return h.backend.Compare(ctx, oldScanID, newScanID, opts...)
 }
 
+// LatestCompleted returns the newest Completed scan of the project on the
+// branch, or (nil, nil) when none exists. See [wfscans.LatestCompleted].
+func (h *ScansHandle) LatestCompleted(ctx context.Context, projectID, branch string) (*models.ScanResponseModel, error) {
+	return wfscans.LatestCompleted(ctx, h.backend, projectID, branch)
+}
+
+// NewFindings returns the findings new in newScanID relative to oldScanID,
+// capped to perEngineCap per engine with Truncated set when capped. See
+// [wfscans.NewFindings].
+func (h *ScansHandle) NewFindings(ctx context.Context, oldScanID, newScanID string, perEngineCap int, opts ...wfscans.CompareOption) (*models.ScanComparison, error) {
+	return wfscans.NewFindings(ctx, h.backend, oldScanID, newScanID, perEngineCap, opts...)
+}
+
 // Results returns the high-level results workflow handle. Use it to walk
 // scan results by scan id, with the cross-engine /api/results endpoint
 // surfaced as typed helpers.

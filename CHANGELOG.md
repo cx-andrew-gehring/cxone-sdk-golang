@@ -3,6 +3,12 @@
 ## Unreleased
 
 ### Added
+- `workflows/scans`: `LatestCompleted(ctx, *Backend, projectID, branch)` returns the
+  newest Completed scan (nil, nil when none; never Running/Queued/Failed/Partial)
+  and `NewFindings(ctx, *Backend, oldScanID, newScanID, perEngineCap, ...CompareOption)`
+  returns findings new in the new scan, capped per engine. `models.ScanComparison`
+  gains `NewFindings` and `Truncated` (set when any engine was capped; counts stay
+  uncapped). Both are exposed as `Client.Scans().LatestCompleted` / `.NewFindings`.
 - `workflows/projects`: `GetOrCreateForRepo(ctx, *Backend, name, CreateOpts)` and
   `Client.Projects().GetOrCreateForRepo` wrap `GetOrCreateByName` for a repo:
   `CreateOpts{RepoURL, Groups (group IDs), Tags, Origin}`. Concurrent in-process

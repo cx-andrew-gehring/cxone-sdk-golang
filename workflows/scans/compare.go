@@ -98,14 +98,22 @@ func WithProgress(cb func(stage string, done, total int)) CompareOption {
 // The old and new scans are fetched concurrently. Cancellation of ctx
 // propagates to both fetches.
 func (b *Backend) Compare(ctx context.Context, oldScanID, newScanID string, opts ...CompareOption) (*models.ScanComparison, error) {
+	cmp, _, _, _, err := b.compare(ctx, oldScanID, newScanID, opts...)
+	return cmp, err
+}
+
+// compare is the shared core of [Backend.Compare] and [NewFindings]. It also
+// returns the fetched new-scan results and resolved options so callers can
+// extract the individual findings without refetching.
+func (b *Backend) compare(ctx context.Context, oldScanID, newScanID string, opts ...CompareOption) (*models.ScanComparison, []*models.ScanResult, []*models.ScanResult, *compareOptions, error) {
 	if b == nil || b.Executor == nil {
-		return nil, &cxerrors.ConfigurationError{Field: "backend", Reason: "is required"}
+		return nil, nil, nil, nil, &cxerrors.ConfigurationError{Field: "backend", Reason: "is required"}
 	}
 	if oldScanID == "" {
-		return nil, &cxerrors.ConfigurationError{Field: "oldScanID", Reason: "is required"}
+		return nil, nil, nil, nil, &cxerrors.ConfigurationError{Field: "oldScanID", Reason: "is required"}
 	}
 	if newScanID == "" {
-		return nil, &cxerrors.ConfigurationError{Field: "newScanID", Reason: "is required"}
+		return nil, nil, nil, nil, &cxerrors.ConfigurationError{Field: "newScanID", Reason: "is required"}
 	}
 
 	cfg := compareOptions{identityKey: models.IdentityKeySimilarityID}
@@ -116,12 +124,12 @@ func (b *Backend) Compare(ctx context.Context, oldScanID, newScanID string, opts
 	case models.IdentityKeySimilarityID, models.IdentityKeyResultHash:
 		// ok
 	default:
-		return nil, &cxerrors.ConfigurationError{Field: "IdentityKey", Reason: "must be similarityId or resultHash"}
+		return nil, nil, nil, nil, &cxerrors.ConfigurationError{Field: "IdentityKey", Reason: "must be similarityId or resultHash"}
 	}
 
 	old, newer, err := fetchScansConcurrent(ctx, b, oldScanID, newScanID, cfg.progress)
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, nil, err
 	}
 	if cfg.progress != nil {
 		cfg.progress("diff", 3, 4)
@@ -132,7 +140,7 @@ func (b *Backend) Compare(ctx context.Context, oldScanID, newScanID string, opts
 	if cfg.progress != nil {
 		cfg.progress("not-exploitable", 4, 4)
 	}
-	return cmp, nil
+	return cmp, old, newer, &cfg, nil
 }
 
 // fetchScansConcurrent fetches both scans' results in parallel. Mirrors the
