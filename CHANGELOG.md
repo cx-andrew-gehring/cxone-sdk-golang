@@ -6,6 +6,8 @@
 - `workflows/policies`: `Evaluate(ctx, *Backend, scanID)` returns the policy
   evaluation result (`models.PolicyResponseModel`, including `BreakBuild`) for
   a scan. A scan with no policies assigned yields `BreakBuild == false`.
+- `Client.Policies()` returns a `PoliciesHandle` with `Evaluate(ctx, scanID)`,
+  making the workflow usable from outside the module.
 
 ## v0.12.1 (2026-10-27)
 
