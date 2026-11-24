@@ -72,6 +72,16 @@ type Invoker struct {
 	configErr error
 }
 
+// UploadStageError wraps a failure of the upload steps of [Invoker.Start]
+// (requesting the presigned URL or PUTting the archive). Both happen strictly
+// before the scan-create request is sent, so when errors.As finds an
+// UploadStageError no scan can have been created. A failure of the scan-create
+// call itself is never wrapped in it. Unwrap yields the original error.
+type UploadStageError struct{ Err error }
+
+func (e *UploadStageError) Error() string { return e.Err.Error() }
+func (e *UploadStageError) Unwrap() error { return e.Err }
+
 // NewInvoker constructs a fluent scan builder bound to the supplied
 // project. The httpClient is used for the upload-mode presigned-URL PUT
 // path; pass the same client the cxone client is using for shared connection
@@ -282,6 +292,9 @@ func (i *Invoker) Start(ctx context.Context) (*ScanInspector, error) {
 	)
 	if i.uploadBody != nil {
 		handlerJSON, err = i.buildUploadHandler(ctx)
+		if err != nil {
+			err = &UploadStageError{Err: err}
+		}
 	} else {
 		handlerJSON, err = i.buildGitHandler()
 	}

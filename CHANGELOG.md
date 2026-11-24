@@ -8,6 +8,8 @@
   remain mutually exclusive with upload.
 
 ### Added
+- `scans.UploadStageError` wraps upload-mode failures that occur before the scan-create
+  request is sent (presign, PUT), so callers can tell "no scan exists" from an ambiguous create failure.
 - `Client.Scans().Cancel(ctx, scanID)` cancels a scan (PATCH `{"status":"Canceled"}`);
   idempotent: 404 (unknown) and 409 (already finished) return nil.
 - `workflows/scans`: `LatestCompleted(ctx, *Backend, projectID, branch)` returns the
