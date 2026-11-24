@@ -91,8 +91,9 @@ func NewInvoker(backend *Backend, repo *projects.ProjectRepoConfig, httpClient *
 	}
 }
 
-// ForBranch selects the git branch to scan in git mode. Mutually exclusive
-// with [Invoker.WithUploadReader].
+// ForBranch selects the git branch to scan in git mode. In upload mode
+// ([Invoker.WithUploadReader]) it names the branch the uploaded scan is filed
+// under (handler.branch); ForCommit and ForTag remain git-only.
 func (i *Invoker) ForBranch(branch string) *Invoker {
 	i.branch = branch
 	return i
@@ -313,8 +314,8 @@ func (i *Invoker) validate() error {
 		return err
 	}
 	i.configs = cfgs
-	gitMode := i.branch != "" || i.commit != "" || i.tag != ""
 	uploadMode := i.uploadBody != nil
+	gitMode := i.commit != "" || i.tag != "" || (i.branch != "" && !uploadMode)
 	if gitMode && uploadMode {
 		return &cxerrors.ConfigurationError{Field: "Source", Reason: "git mode (ForBranch/ForCommit/ForTag) and upload mode (WithUploadReader) are mutually exclusive"}
 	}
@@ -375,6 +376,7 @@ func (i *Invoker) buildUploadHandler(ctx context.Context) (json.RawMessage, erro
 		return nil, putErr
 	}
 	h := models.ScanHandler{
+		Branch:       i.branch,
 		RepoURL:      i.repo.RepoURL(),
 		UploadURL:    uploadURL,
 		UploadFormat: i.uploadFormat,

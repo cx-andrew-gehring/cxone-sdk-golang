@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Changed
+- `scans.Invoker`: `ForBranch` is now allowed in upload mode and is sent as the upload
+  handler's `branch`, so uploaded scans are filed under that branch. `ForCommit`/`ForTag`
+  remain mutually exclusive with upload.
+
 ### Added
 - `Client.Scans().Cancel(ctx, scanID)` cancels a scan (PATCH `{"status":"Canceled"}`);
   idempotent: 404 (unknown) and 409 (already finished) return nil.
