@@ -571,6 +571,14 @@ func (h *ProjectsHandle) GetOrCreateByName(ctx context.Context, template *models
 	return wfprojects.GetOrCreateByName(ctx, h.backend, template)
 }
 
+// GetOrCreateForRepo finds or creates the project called name for a
+// repository, setting repo URL, origin, tags and groups (group IDs), and
+// updating RepoURL/tags on an existing project. See
+// [wfprojects.GetOrCreateForRepo].
+func (h *ProjectsHandle) GetOrCreateForRepo(ctx context.Context, name string, opts wfprojects.CreateOpts) (*wfprojects.ProjectRepoConfig, error) {
+	return wfprojects.GetOrCreateForRepo(ctx, h.backend, name, opts)
+}
+
 // GetOrCreateInApplicationByName finds or creates a project and ensures it
 // is associated with the named application. See
 // [wfprojects.GetOrCreateInApplicationByName].

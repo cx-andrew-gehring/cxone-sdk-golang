@@ -3,6 +3,12 @@
 ## Unreleased
 
 ### Added
+- `workflows/projects`: `GetOrCreateForRepo(ctx, *Backend, name, CreateOpts)` and
+  `Client.Projects().GetOrCreateForRepo` wrap `GetOrCreateByName` for a repo:
+  `CreateOpts{RepoURL, Groups (group IDs), Tags, Origin}`. Concurrent in-process
+  callers issue a single create. An existing project gets its `RepoURL` PATCHed
+  if different and `Tags` merged (existing tags kept); no write when unchanged.
+  Groups and origin apply only at creation.
 - `workflows/policies`: `Evaluate(ctx, *Backend, scanID)` returns the policy
   evaluation result (`models.PolicyResponseModel`, including `BreakBuild`) for
   a scan. A scan with no policies assigned yields `BreakBuild == false`.
