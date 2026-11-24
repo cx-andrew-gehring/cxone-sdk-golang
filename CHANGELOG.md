@@ -8,8 +8,12 @@
   remain mutually exclusive with upload.
 
 ### Added
-- `scans.UploadStageError` wraps upload-mode failures that occur before the scan-create
-  request is sent (presign, PUT), so callers can tell "no scan exists" from an ambiguous create failure.
+- `scans.PreRequestError` wraps every `Invoker.Start` failure that happens strictly before the
+  scan-create request is sent (builder/config validation, presigned-URL request, archive PUT).
+  If `errors.As` finds it, no scan was created, even when the transport retried the earlier
+  requests; nothing returned after the create request is sent is ever wrapped. The concrete error
+  type returned for these paths changes (it is now `*PreRequestError`), but `Unwrap` keeps
+  `errors.As`/`errors.Is` on the original cause (e.g. `*ConfigurationError`) working.
 - `Client.Scans().Cancel(ctx, scanID)` cancels a scan (PATCH `{"status":"Canceled"}`);
   idempotent: 404 (unknown) and 409 (already finished) return nil.
 - `workflows/scans`: `LatestCompleted(ctx, *Backend, projectID, branch)` returns the

@@ -72,15 +72,19 @@ type Invoker struct {
 	configErr error
 }
 
-// UploadStageError wraps a failure of the upload steps of [Invoker.Start]
-// (requesting the presigned URL or PUTting the archive). Both happen strictly
-// before the scan-create request is sent, so when errors.As finds an
-// UploadStageError no scan can have been created. A failure of the scan-create
-// call itself is never wrapped in it. Unwrap yields the original error.
-type UploadStageError struct{ Err error }
+// PreRequestError wraps a failure of [Invoker.Start] that happened strictly
+// BEFORE the scan-create request (POST /api/scans) was sent: builder/config
+// validation, or the upload steps (presigned-URL request, archive PUT). When
+// errors.As finds a PreRequestError no scan can have been created, even if
+// the transport retried those earlier requests. Nothing returned once the
+// scan-create request has been sent is ever wrapped in it, so a create
+// failure (non-2xx, reset, timeout, cancellation) stays ambiguous. Unwrap
+// yields the original error, so errors.As/Is on the concrete cause (e.g.
+// *cxerrors.ConfigurationError) keep working.
+type PreRequestError struct{ Err error }
 
-func (e *UploadStageError) Error() string { return e.Err.Error() }
-func (e *UploadStageError) Unwrap() error { return e.Err }
+func (e *PreRequestError) Error() string { return e.Err.Error() }
+func (e *PreRequestError) Unwrap() error { return e.Err }
 
 // NewInvoker constructs a fluent scan builder bound to the supplied
 // project. The httpClient is used for the upload-mode presigned-URL PUT
@@ -279,10 +283,10 @@ func (i *Invoker) WithUploadReader(body io.Reader, size int64) *Invoker {
 // underlying endpoint helpers.
 func (i *Invoker) Start(ctx context.Context) (*ScanInspector, error) {
 	if i.configErr != nil {
-		return nil, i.configErr
+		return nil, &PreRequestError{Err: i.configErr}
 	}
 	if err := i.validate(); err != nil {
-		return nil, err
+		return nil, &PreRequestError{Err: err}
 	}
 
 	// Build handler payload depending on source mode.
@@ -292,14 +296,11 @@ func (i *Invoker) Start(ctx context.Context) (*ScanInspector, error) {
 	)
 	if i.uploadBody != nil {
 		handlerJSON, err = i.buildUploadHandler(ctx)
-		if err != nil {
-			err = &UploadStageError{Err: err}
-		}
 	} else {
 		handlerJSON, err = i.buildGitHandler()
 	}
 	if err != nil {
-		return nil, err
+		return nil, &PreRequestError{Err: err}
 	}
 
 	scanReq := &models.Scan{
