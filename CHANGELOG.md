@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- `workflows/policies`: `Evaluate(ctx, *Backend, scanID)` returns the policy
+  evaluation result (`models.PolicyResponseModel`, including `BreakBuild`) for
+  a scan. A scan with no policies assigned yields `BreakBuild == false`.
+
 ## v0.12.1 (2026-10-27)
 
 ### Fixed
