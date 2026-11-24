@@ -256,7 +256,7 @@ group, _ := client.Groups().GetOrCreateByName(ctx, "my-team")
 ### Policies
 
 ```go
-res, _ := policies.Evaluate(ctx, &policies.Backend{Executor: exec, BaseURL: base}, scanID)
+res, _ := client.Policies().Evaluate(ctx, scanID)
 if res.BreakBuild { /* gate the merge */ }
 ```
 

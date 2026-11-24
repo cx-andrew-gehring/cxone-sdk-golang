@@ -29,6 +29,7 @@ import (
 	wfclients "github.com/cx-andrew-gehring/cxone-sdk-golang/workflows/clients"
 	wfgroups "github.com/cx-andrew-gehring/cxone-sdk-golang/workflows/groups"
 	wfmigration "github.com/cx-andrew-gehring/cxone-sdk-golang/workflows/migration"
+	wfpolicies "github.com/cx-andrew-gehring/cxone-sdk-golang/workflows/policies"
 	wfpresets "github.com/cx-andrew-gehring/cxone-sdk-golang/workflows/presets"
 	wfprojects "github.com/cx-andrew-gehring/cxone-sdk-golang/workflows/projects"
 	wfreports "github.com/cx-andrew-gehring/cxone-sdk-golang/workflows/reports"
@@ -508,6 +509,29 @@ func (c *Client) Scans() *ScansHandle {
 // lifetime of your application rather than constructing many.
 func (c *Client) Presets() *wfpresets.PresetReader {
 	return wfpresets.NewReader(&wfpresets.Backend{Executor: c.executor, BaseURL: c.rootURL()})
+}
+
+// Policies returns the high-level policy workflow handle:
+//
+//	res, err := client.Policies().Evaluate(ctx, scanID)
+//	if err == nil && res.BreakBuild { /* gate */ }
+func (c *Client) Policies() *PoliciesHandle {
+	return &PoliciesHandle{
+		backend: &wfpolicies.Backend{Executor: c.executor, BaseURL: c.rootURL()},
+	}
+}
+
+// PoliciesHandle wraps the policies workflow with method-style ergonomics.
+//
+// Constructed by [Client.Policies]; do not instantiate directly.
+type PoliciesHandle struct {
+	backend *wfpolicies.Backend
+}
+
+// Evaluate returns the policy evaluation result (including the BreakBuild
+// verdict) for scanID. A scan with no policies yields BreakBuild == false.
+func (h *PoliciesHandle) Evaluate(ctx context.Context, scanID string) (*models.PolicyResponseModel, error) {
+	return wfpolicies.Evaluate(ctx, h.backend, scanID)
 }
 
 // Reports returns the high-level reports workflow handle. Used to start
