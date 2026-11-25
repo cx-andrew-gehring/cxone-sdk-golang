@@ -3,6 +3,11 @@
 ## Unreleased
 
 ### Changed
+- **Behaviour change** `models.ScanResultData` now decodes its `any` fields (`QueryID`,
+  `RecommendedVersion`) with `json.Number`: numeric wire values become `json.Number` instead of
+  `float64`, so 64-bit SAST query IDs above 2^53 are no longer rounded. Callers that type-asserted
+  `float64` must switch to `json.Number` (or use the new `ScanResultData.QueryIDString()`, which
+  returns exact digits and reports `ok=false` for missing/non-integer/inexact IDs).
 - `scans.Invoker`: `ForBranch` is now allowed in upload mode and is sent as the upload
   handler's `branch`, so uploaded scans are filed under that branch. `ForCommit`/`ForTag`
   remain mutually exclusive with upload.
