@@ -45,6 +45,8 @@ type Invoker struct {
 	commit       string
 	engines      []string
 	tags         map[string]string
+	baseBranch   string            // sast config baseBranch (PR target branch)
+	sourceOrigin string            // request-level sourceOrigin
 	projectTags  map[string]string // nil unless WithProjectTags (overwrites project tags server-side)
 	extraConfigs []models.Config   // WithConfigs passthrough
 	sastConfig   *models.SastConfig
@@ -70,6 +72,20 @@ type Invoker struct {
 	configErr error
 }
 
+// PreRequestError wraps a failure of [Invoker.Start] that happened strictly
+// BEFORE the scan-create request (POST /api/scans) was sent: builder/config
+// validation, or the upload steps (presigned-URL request, archive PUT). When
+// errors.As finds a PreRequestError no scan can have been created, even if
+// the transport retried those earlier requests. Nothing returned once the
+// scan-create request has been sent is ever wrapped in it, so a create
+// failure (non-2xx, reset, timeout, cancellation) stays ambiguous. Unwrap
+// yields the original error, so errors.As/Is on the concrete cause (e.g.
+// *cxerrors.ConfigurationError) keep working.
+type PreRequestError struct{ Err error }
+
+func (e *PreRequestError) Error() string { return e.Err.Error() }
+func (e *PreRequestError) Unwrap() error { return e.Err }
+
 // NewInvoker constructs a fluent scan builder bound to the supplied
 // project. The httpClient is used for the upload-mode presigned-URL PUT
 // path; pass the same client the cxone client is using for shared connection
@@ -89,8 +105,9 @@ func NewInvoker(backend *Backend, repo *projects.ProjectRepoConfig, httpClient *
 	}
 }
 
-// ForBranch selects the git branch to scan in git mode. Mutually exclusive
-// with [Invoker.WithUploadReader].
+// ForBranch selects the git branch to scan in git mode. In upload mode
+// ([Invoker.WithUploadReader]) it names the branch the uploaded scan is filed
+// under (handler.branch); ForCommit and ForTag remain git-only.
 func (i *Invoker) ForBranch(branch string) *Invoker {
 	i.branch = branch
 	return i
@@ -189,6 +206,22 @@ func (i *Invoker) WithTags(tags map[string]string) *Invoker {
 	return i
 }
 
+// WithBaseBranch sets the SAST config's baseBranch (the PR target branch) so
+// results can be computed as a diff against it. It is valid only when the
+// SAST engine is selected (via WithEngines or a "sast" WithConfigs entry);
+// otherwise Start returns a *cxerrors.ConfigurationError. It overrides any
+// BaseBranch set through WithSastConfig.
+func (i *Invoker) WithBaseBranch(branch string) *Invoker {
+	i.baseBranch = branch
+	return i
+}
+
+// WithSourceOrigin sets the request's sourceOrigin label (e.g. "PR Webhook").
+func (i *Invoker) WithSourceOrigin(origin string) *Invoker {
+	i.sourceOrigin = origin
+	return i
+}
+
 // WithSastConfig overrides the SAST engine configuration for this scan
 // (preset name, fast-scan mode, light queries, etc.). The platform's
 // project-level configuration is used for any field left unset.
@@ -250,10 +283,10 @@ func (i *Invoker) WithUploadReader(body io.Reader, size int64) *Invoker {
 // underlying endpoint helpers.
 func (i *Invoker) Start(ctx context.Context) (*ScanInspector, error) {
 	if i.configErr != nil {
-		return nil, i.configErr
+		return nil, &PreRequestError{Err: i.configErr}
 	}
 	if err := i.validate(); err != nil {
-		return nil, err
+		return nil, &PreRequestError{Err: err}
 	}
 
 	// Build handler payload depending on source mode.
@@ -267,7 +300,7 @@ func (i *Invoker) Start(ctx context.Context) (*ScanInspector, error) {
 		handlerJSON, err = i.buildGitHandler()
 	}
 	if err != nil {
-		return nil, err
+		return nil, &PreRequestError{Err: err}
 	}
 
 	scanReq := &models.Scan{
@@ -276,6 +309,8 @@ func (i *Invoker) Start(ctx context.Context) (*ScanInspector, error) {
 		Project: models.ScanProject{ID: i.repo.ID(), Tags: i.projectTags},
 		Tags:    i.tags,
 		Config:  i.configs,
+
+		SourceOrigin: i.sourceOrigin,
 	}
 
 	resp, err := endpoints.Create(ctx, i.backend.Executor, i.backend.BaseURL, scanReq)
@@ -293,8 +328,8 @@ func (i *Invoker) validate() error {
 		return err
 	}
 	i.configs = cfgs
-	gitMode := i.branch != "" || i.commit != "" || i.tag != ""
 	uploadMode := i.uploadBody != nil
+	gitMode := i.commit != "" || i.tag != "" || (i.branch != "" && !uploadMode)
 	if gitMode && uploadMode {
 		return &cxerrors.ConfigurationError{Field: "Source", Reason: "git mode (ForBranch/ForCommit/ForTag) and upload mode (WithUploadReader) are mutually exclusive"}
 	}
@@ -355,6 +390,7 @@ func (i *Invoker) buildUploadHandler(ctx context.Context) (json.RawMessage, erro
 		return nil, putErr
 	}
 	h := models.ScanHandler{
+		Branch:       i.branch,
 		RepoURL:      i.repo.RepoURL(),
 		UploadURL:    uploadURL,
 		UploadFormat: i.uploadFormat,
@@ -432,6 +468,24 @@ func (i *Invoker) assembleConfigs() ([]models.Config, error) {
 	for _, c := range i.extraConfigs {
 		if err := add("Configs", c); err != nil {
 			return nil, err
+		}
+	}
+	if i.baseBranch != "" {
+		found := false
+		for idx := range out {
+			if out[idx].Type != "sast" {
+				continue
+			}
+			found = true
+			v := make(map[string]any, len(out[idx].Value)+1)
+			for k, val := range out[idx].Value {
+				v[k] = val
+			}
+			v["baseBranch"] = i.baseBranch
+			out[idx].Value = v
+		}
+		if !found {
+			return nil, &cxerrors.ConfigurationError{Field: "BaseBranch", Reason: "is only valid when the sast engine is enabled"}
 		}
 	}
 	return out, nil

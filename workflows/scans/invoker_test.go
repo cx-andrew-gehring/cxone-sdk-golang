@@ -138,7 +138,7 @@ func TestInvokerRejectsMixedSourceModes(t *testing.T) {
 	body := []byte("zip")
 	_, err := scans.NewInvoker(scanBackend, repo, client).
 		WithEngines("sast").
-		ForBranch("feature").
+		ForCommit("abc123").
 		WithUploadReader(bytes.NewReader(body), int64(len(body))).
 		Start(context.Background())
 	var ce *cxerrors.ConfigurationError
@@ -234,5 +234,42 @@ func TestInvokerSastConfigPropagatesIntoEngineConfig(t *testing.T) {
 	}
 	if got, _ := createBody.Config[0].Value["presetName"].(string); got != "ASA Premium" {
 		t.Errorf("presetName = %v", createBody.Config[0].Value)
+	}
+}
+
+// In upload mode ForBranch names the CxOne branch the scan is filed under
+// (handler.branch); ForCommit/ForTag stay git-only.
+func TestInvokerUploadModeSendsBranchInHandler(t *testing.T) {
+	var createBody models.Scan
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api/uploads":
+			_, _ = io.WriteString(w, `{"url":"http://`+r.Host+`/put/abc"}`)
+		case r.Method == http.MethodPut:
+			w.WriteHeader(http.StatusOK)
+		case r.URL.Path == "/api/scans":
+			body, _ := io.ReadAll(r.Body)
+			_ = json.Unmarshal(body, &createBody)
+			w.WriteHeader(http.StatusCreated)
+			_, _ = io.WriteString(w, `{"id":"u-scan","status":"Queued"}`)
+		}
+	}))
+	defer apiSrv.Close()
+	exec := transport.NewExecutor(transport.Config{
+		HTTPClient: apiSrv.Client(), Authenticator: stubAuth{}, UserAgent: "test",
+		RetryPolicy: retry.Policy{MaxAttempts: 1},
+	})
+	sb := &scans.Backend{Executor: exec, BaseURL: apiSrv.URL + "/"}
+	repo, _ := projects.FromProjectModel(&projects.Backend{Executor: exec, BaseURL: apiSrv.URL + "/"},
+		&models.ProjectResponseModel{ID: "p1", RepoURL: "git@x", MainBranch: "main"})
+	body := []byte("zipdata")
+	if _, err := scans.NewInvoker(sb, repo, apiSrv.Client()).WithEngines("sast").ForBranch("feature/x").
+		WithUploadReader(bytes.NewReader(body), int64(len(body))).Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	var h models.ScanHandler
+	_ = json.Unmarshal(createBody.Handler, &h)
+	if createBody.Type != "upload" || h.Branch != "feature/x" {
+		t.Errorf("type=%q handler=%s", createBody.Type, createBody.Handler)
 	}
 }

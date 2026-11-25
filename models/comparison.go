@@ -37,6 +37,25 @@ type ScanComparison struct {
 	BySeverity     map[string]ScanComparisonBucket `json:"bySeverity"`
 	Totals         ScanComparisonBucket            `json:"totals"`
 	NotExploitable []NotExploitableGroup           `json:"notExploitable"`
+
+	// NewFindings is populated only by the workflow NewFindings call: the
+	// findings present in the new scan but not the old, capped per engine
+	// (see Truncated). It is empty (and omitted from JSON) for plain
+	// comparisons.
+	NewFindings []*ScanResult `json:"newFindings,omitempty"`
+	// Truncated is true when NewFindings dropped findings because at least
+	// one engine exceeded the per-engine cap. Totals.New and BySeverity
+	// always reflect the uncapped counts.
+	Truncated bool `json:"truncated,omitempty"`
+
+	// ResolvedFindings is populated only by the workflow NewFindings call:
+	// the findings present in the old scan but not the new, capped per
+	// engine like NewFindings (see ResolvedTruncated). Totals.Resolved
+	// always reflects the uncapped count.
+	ResolvedFindings []*ScanResult `json:"resolvedFindings,omitempty"`
+	// ResolvedTruncated is true when ResolvedFindings dropped findings
+	// because at least one engine exceeded the per-engine cap.
+	ResolvedTruncated bool `json:"resolvedTruncated,omitempty"`
 }
 
 // ScanComparisonBucket is the per-severity (or aggregate) count of differences

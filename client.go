@@ -29,6 +29,7 @@ import (
 	wfclients "github.com/cx-andrew-gehring/cxone-sdk-golang/workflows/clients"
 	wfgroups "github.com/cx-andrew-gehring/cxone-sdk-golang/workflows/groups"
 	wfmigration "github.com/cx-andrew-gehring/cxone-sdk-golang/workflows/migration"
+	wfpolicies "github.com/cx-andrew-gehring/cxone-sdk-golang/workflows/policies"
 	wfpresets "github.com/cx-andrew-gehring/cxone-sdk-golang/workflows/presets"
 	wfprojects "github.com/cx-andrew-gehring/cxone-sdk-golang/workflows/projects"
 	wfreports "github.com/cx-andrew-gehring/cxone-sdk-golang/workflows/reports"
@@ -510,6 +511,29 @@ func (c *Client) Presets() *wfpresets.PresetReader {
 	return wfpresets.NewReader(&wfpresets.Backend{Executor: c.executor, BaseURL: c.rootURL()})
 }
 
+// Policies returns the high-level policy workflow handle:
+//
+//	res, err := client.Policies().Evaluate(ctx, scanID)
+//	if err == nil && res.BreakBuild { /* gate */ }
+func (c *Client) Policies() *PoliciesHandle {
+	return &PoliciesHandle{
+		backend: &wfpolicies.Backend{Executor: c.executor, BaseURL: c.rootURL()},
+	}
+}
+
+// PoliciesHandle wraps the policies workflow with method-style ergonomics.
+//
+// Constructed by [Client.Policies]; do not instantiate directly.
+type PoliciesHandle struct {
+	backend *wfpolicies.Backend
+}
+
+// Evaluate returns the policy evaluation result (including the BreakBuild
+// verdict) for scanID. A scan with no policies yields BreakBuild == false.
+func (h *PoliciesHandle) Evaluate(ctx context.Context, scanID string) (*models.PolicyResponseModel, error) {
+	return wfpolicies.Evaluate(ctx, h.backend, scanID)
+}
+
 // Reports returns the high-level reports workflow handle. Used to start
 // JSON or PDF report generation:
 //
@@ -545,6 +569,14 @@ func (h *ProjectsHandle) Wrap(project *models.ProjectResponseModel) (*wfprojects
 // template. See [wfprojects.GetOrCreateByName].
 func (h *ProjectsHandle) GetOrCreateByName(ctx context.Context, template *models.Project) (*wfprojects.ProjectRepoConfig, error) {
 	return wfprojects.GetOrCreateByName(ctx, h.backend, template)
+}
+
+// GetOrCreateForRepo finds or creates the project called name for a
+// repository, setting repo URL, origin, tags and groups (group IDs), and
+// updating RepoURL/tags on an existing project. See
+// [wfprojects.GetOrCreateForRepo].
+func (h *ProjectsHandle) GetOrCreateForRepo(ctx context.Context, name string, opts wfprojects.CreateOpts) (*wfprojects.ProjectRepoConfig, error) {
+	return wfprojects.GetOrCreateForRepo(ctx, h.backend, name, opts)
 }
 
 // GetOrCreateInApplicationByName finds or creates a project and ensures it
@@ -636,6 +668,21 @@ func (h *ScansHandle) ListForProject(ctx context.Context, projectID string) ([]*
 	return out, nil
 }
 
+// Cancel asks the platform to stop a scan (PATCH /api/scans/{id}
+// {"status":"Canceled"}). It is idempotent: an unknown scan (404) or one that
+// has already finished (409) counts as success.
+func (h *ScansHandle) Cancel(ctx context.Context, scanID string) error {
+	if scanID == "" {
+		return &ConfigurationError{Field: "scanID", Reason: "is required"}
+	}
+	err := scansep.Cancel(ctx, h.backend.Executor, h.backend.BaseURL, scanID)
+	var re *ResponseError
+	if errors.As(err, &re) && (re.StatusCode == http.StatusNotFound || re.StatusCode == http.StatusConflict) {
+		return nil
+	}
+	return err
+}
+
 // NewScan returns a fluent builder for starting a new scan against the
 // supplied project. The builder is bound to the client's HTTP client so
 // upload-mode scans can use the shared connection pool.
@@ -648,6 +695,19 @@ func (h *ScansHandle) NewScan(repo *wfprojects.ProjectRepoConfig) *wfscans.Invok
 // [wfscans.Backend.Compare] for option details.
 func (h *ScansHandle) Compare(ctx context.Context, oldScanID, newScanID string, opts ...wfscans.CompareOption) (*models.ScanComparison, error) {
 	return h.backend.Compare(ctx, oldScanID, newScanID, opts...)
+}
+
+// LatestCompleted returns the newest Completed scan of the project on the
+// branch, or (nil, nil) when none exists. See [wfscans.LatestCompleted].
+func (h *ScansHandle) LatestCompleted(ctx context.Context, projectID, branch string) (*models.ScanResponseModel, error) {
+	return wfscans.LatestCompleted(ctx, h.backend, projectID, branch)
+}
+
+// NewFindings returns the findings new in newScanID relative to oldScanID,
+// capped to perEngineCap per engine with Truncated set when capped. See
+// [wfscans.NewFindings].
+func (h *ScansHandle) NewFindings(ctx context.Context, oldScanID, newScanID string, perEngineCap int, opts ...wfscans.CompareOption) (*models.ScanComparison, error) {
+	return wfscans.NewFindings(ctx, h.backend, oldScanID, newScanID, perEngineCap, opts...)
 }
 
 // Results returns the high-level results workflow handle. Use it to walk

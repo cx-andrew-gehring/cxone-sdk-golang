@@ -1,5 +1,54 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- **Behaviour change** `models.ScanResultData` now decodes its `any` fields (`QueryID`,
+  `RecommendedVersion`) with `json.Number`: numeric wire values become `json.Number` instead of
+  `float64`, so 64-bit SAST query IDs above 2^53 are no longer rounded. Callers that type-asserted
+  `float64` must switch to `json.Number` (or use the new `ScanResultData.QueryIDString()`, which
+  returns exact digits and reports `ok=false` for missing/non-integer/inexact IDs).
+- `scans.Invoker`: `ForBranch` is now allowed in upload mode and is sent as the upload
+  handler's `branch`, so uploaded scans are filed under that branch. `ForCommit`/`ForTag`
+  remain mutually exclusive with upload.
+
+### Added
+- `workflows/scans.NewFindings` also returns the resolved findings (in the old scan, not
+  the new) in `models.ScanComparison.ResolvedFindings`, ordered and capped per engine like
+  `NewFindings` (`ResolvedTruncated` set on a cap hit; `Totals.Resolved` stays uncapped).
+  An empty `oldScanID` now means "no baseline": only the new scan is fetched and all of its
+  findings are new.
+- `scans.PreRequestError` wraps every `Invoker.Start` failure that happens strictly before the
+  scan-create request is sent (builder/config validation, presigned-URL request, archive PUT).
+  If `errors.As` finds it, no scan was created, even when the transport retried the earlier
+  requests; nothing returned after the create request is sent is ever wrapped. The concrete error
+  type returned for these paths changes (it is now `*PreRequestError`), but `Unwrap` keeps
+  `errors.As`/`errors.Is` on the original cause (e.g. `*ConfigurationError`) working.
+- `Client.Scans().Cancel(ctx, scanID)` cancels a scan (PATCH `{"status":"Canceled"}`);
+  idempotent: 404 (unknown) and 409 (already finished) return nil.
+- `workflows/scans`: `LatestCompleted(ctx, *Backend, projectID, branch)` returns the
+  newest Completed scan (nil, nil when none; never Running/Queued/Failed/Partial)
+  and `NewFindings(ctx, *Backend, oldScanID, newScanID, perEngineCap, ...CompareOption)`
+  returns findings new in the new scan, capped per engine. `models.ScanComparison`
+  gains `NewFindings` and `Truncated` (set when any engine was capped; counts stay
+  uncapped). Both are exposed as `Client.Scans().LatestCompleted` / `.NewFindings`.
+- `workflows/projects`: `GetOrCreateForRepo(ctx, *Backend, name, CreateOpts)` and
+  `Client.Projects().GetOrCreateForRepo` wrap `GetOrCreateByName` for a repo:
+  `CreateOpts{RepoURL, Groups (group IDs), Tags, Origin}`. Concurrent in-process
+  callers issue a single create. An existing project gets its `RepoURL` PATCHed
+  if different and `Tags` merged (existing tags kept); no write when unchanged.
+  Groups and origin apply only at creation.
+- `workflows/policies`: `Evaluate(ctx, *Backend, scanID)` returns the policy
+  evaluation result (`models.PolicyResponseModel`, including `BreakBuild`) for
+  a scan. A scan with no policies assigned yields `BreakBuild == false`.
+- `Client.Policies()` returns a `PoliciesHandle` with `Evaluate(ctx, scanID)`,
+  making the workflow usable from outside the module.
+- `scans.Invoker`: `WithBaseBranch(branch)` sets the SAST config `baseBranch`
+  (PR target branch, for diff results; requires the SAST engine, else a
+  `*cxerrors.ConfigurationError`) and `WithSourceOrigin(origin)` sets the
+  request `sourceOrigin`. `models.SastConfig.BaseBranch` and
+  `models.Scan.SourceOrigin` added.
+
 ## v0.12.1 (2026-10-27)
 
 ### Fixed

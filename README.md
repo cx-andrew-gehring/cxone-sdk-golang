@@ -253,6 +253,13 @@ astAppID, _ := client.Clients().ASTAppID(ctx) // cached after first call
 group, _ := client.Groups().GetOrCreateByName(ctx, "my-team")
 ```
 
+### Policies
+
+```go
+res, _ := client.Policies().Evaluate(ctx, scanID)
+if res.BreakBuild { /* gate the merge */ }
+```
+
 ### Projects
 
 ```go
