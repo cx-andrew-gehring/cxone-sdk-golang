@@ -47,6 +47,15 @@ type ScanComparison struct {
 	// one engine exceeded the per-engine cap. Totals.New and BySeverity
 	// always reflect the uncapped counts.
 	Truncated bool `json:"truncated,omitempty"`
+
+	// ResolvedFindings is populated only by the workflow NewFindings call:
+	// the findings present in the old scan but not the new, capped per
+	// engine like NewFindings (see ResolvedTruncated). Totals.Resolved
+	// always reflects the uncapped count.
+	ResolvedFindings []*ScanResult `json:"resolvedFindings,omitempty"`
+	// ResolvedTruncated is true when ResolvedFindings dropped findings
+	// because at least one engine exceeded the per-engine cap.
+	ResolvedTruncated bool `json:"resolvedTruncated,omitempty"`
 }
 
 // ScanComparisonBucket is the per-severity (or aggregate) count of differences

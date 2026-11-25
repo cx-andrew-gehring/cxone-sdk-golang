@@ -8,6 +8,11 @@
   remain mutually exclusive with upload.
 
 ### Added
+- `workflows/scans.NewFindings` also returns the resolved findings (in the old scan, not
+  the new) in `models.ScanComparison.ResolvedFindings`, ordered and capped per engine like
+  `NewFindings` (`ResolvedTruncated` set on a cap hit; `Totals.Resolved` stays uncapped).
+  An empty `oldScanID` now means "no baseline": only the new scan is fetched and all of its
+  findings are new.
 - `scans.PreRequestError` wraps every `Invoker.Start` failure that happens strictly before the
   scan-create request is sent (builder/config validation, presigned-URL request, archive PUT).
   If `errors.As` finds it, no scan was created, even when the transport retried the earlier

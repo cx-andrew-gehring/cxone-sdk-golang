@@ -69,18 +69,70 @@ func LatestCompleted(ctx context.Context, b *Backend, projectID, branch string) 
 // when any engine exceeds the cap the extra findings are dropped and
 // [models.ScanComparison.Truncated] is set. Counts in Totals and BySeverity
 // remain uncapped. A perEngineCap <= 0 means no cap.
+//
+// The resolved findings (in oldScanID but not newScanID) are returned in
+// [models.ScanComparison.ResolvedFindings] with the same ordering and cap
+// ([models.ScanComparison.ResolvedTruncated]).
+//
+// An empty oldScanID means "no baseline": only newScanID is fetched and
+// every one of its findings is new (nothing is resolved or recurrent).
 func NewFindings(ctx context.Context, b *Backend, oldScanID, newScanID string, perEngineCap int, opts ...CompareOption) (*models.ScanComparison, error) {
-	cmp, oldRes, newRes, cfg, err := b.compare(ctx, oldScanID, newScanID, opts...)
+	var (
+		cmp            *models.ScanComparison
+		oldRes, newRes []*models.ScanResult
+		cfg            *compareOptions
+		err            error
+	)
+	if oldScanID == "" {
+		cmp, newRes, cfg, err = b.noBaseline(ctx, newScanID, opts...)
+	} else {
+		cmp, oldRes, newRes, cfg, err = b.compare(ctx, oldScanID, newScanID, opts...)
+	}
 	if err != nil {
 		return nil, err
 	}
 	idOf := identityFn(cfg.identityKey)
-	seen := make(map[string]struct{}, len(oldRes))
-	for _, r := range oldRes {
+	cmp.NewFindings, cmp.Truncated = onlyIn(newRes, oldRes, idOf, cfg, perEngineCap)
+	cmp.ResolvedFindings, cmp.ResolvedTruncated = onlyIn(oldRes, newRes, idOf, cfg, perEngineCap)
+	return cmp, nil
+}
+
+// noBaseline fetches newScanID only and counts all of its findings as new.
+func (b *Backend) noBaseline(ctx context.Context, newScanID string, opts ...CompareOption) (*models.ScanComparison, []*models.ScanResult, *compareOptions, error) {
+	if b == nil || b.Executor == nil {
+		return nil, nil, nil, &cxerrors.ConfigurationError{Field: "backend", Reason: "is required"}
+	}
+	if newScanID == "" {
+		return nil, nil, nil, &cxerrors.ConfigurationError{Field: "newScanID", Reason: "is required"}
+	}
+	cfg := compareOptions{identityKey: models.IdentityKeySimilarityID}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	switch cfg.identityKey {
+	case models.IdentityKeySimilarityID, models.IdentityKeyResultHash:
+	default:
+		return nil, nil, nil, &cxerrors.ConfigurationError{Field: "IdentityKey", Reason: "must be similarityId or resultHash"}
+	}
+	newRes, err := fetchAllResults(ctx, b, newScanID)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	cmp := diffResults("", newScanID, nil, newRes, &cfg)
+	cmp.NotExploitable = groupNotExploitable(newRes, &cfg)
+	return cmp, newRes, &cfg, nil
+}
+
+// onlyIn returns the findings of in whose identity is absent from other,
+// de-duplicated by identity, ordered deterministically (severity descending,
+// identity, result ID) and capped per engine; truncated reports a cap hit.
+func onlyIn(in, other []*models.ScanResult, idOf func(*models.ScanResult) string, cfg *compareOptions, perEngineCap int) (out []*models.ScanResult, truncated bool) {
+	seen := make(map[string]struct{}, len(other))
+	for _, r := range other {
 		seen[idOf(r)] = struct{}{}
 	}
 	var cands []*models.ScanResult
-	for _, r := range newRes {
+	for _, r := range in {
 		if !cfg.wantSeverity(r.Severity) || !cfg.wantEngine(r.Type) {
 			continue
 		}
@@ -89,8 +141,7 @@ func NewFindings(ctx context.Context, b *Backend, oldScanID, newScanID string, p
 		}
 		cands = append(cands, r)
 	}
-	// Deterministic order so the same findings survive the cap on every call:
-	// severity descending, then identity, then result ID ascending.
+	// Deterministic order so the same findings survive the cap on every call.
 	sort.SliceStable(cands, func(i, j int) bool {
 		ri, rj := severityRank(cands[i].Severity), severityRank(cands[j].Severity)
 		if ri != rj {
@@ -111,13 +162,13 @@ func NewFindings(ctx context.Context, b *Backend, oldScanID, newScanID string, p
 		}
 		emitted[id] = struct{}{}
 		if perEngineCap > 0 && perEngine[r.Type] >= perEngineCap {
-			cmp.Truncated = true
+			truncated = true
 			continue
 		}
 		perEngine[r.Type]++
-		cmp.NewFindings = append(cmp.NewFindings, r)
+		out = append(out, r)
 	}
-	return cmp, nil
+	return out, truncated
 }
 
 func severityRank(s string) int {

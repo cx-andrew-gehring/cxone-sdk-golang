@@ -215,3 +215,47 @@ func TestNewFindingsNonPositiveCapMeansNoCap(t *testing.T) {
 		}
 	}
 }
+
+func TestNewFindingsReturnsResolvedFindingsCapped(t *testing.T) {
+	var oldRes, newRes []*models.ScanResult
+	for i := 0; i < 4; i++ { // fixed: only in old
+		oldRes = append(oldRes, sastRes(i, "HIGH"))
+	}
+	oldRes = append(oldRes, &models.ScanResult{ID: "low", SimilarityID: "lowfix", Severity: "LOW", Type: "sast"})
+	rec := sastRes(50, "MEDIUM") // recurring
+	oldRes = append(oldRes, rec)
+	newRes = append(newRes, rec, sastRes(60, "HIGH"))
+	fake := &fakeResultsServer{t: t, oldID: "old", newID: "new", oldRes: oldRes, newRes: newRes}
+	got, err := scans.NewFindings(context.Background(), newBackend(t, fake.handler()), "old", "new", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	for _, r := range got.ResolvedFindings {
+		ids = append(ids, r.ID)
+	}
+	if want := []string{"r0", "r1", "r2"}; !reflect.DeepEqual(ids, want) || !got.ResolvedTruncated {
+		t.Fatalf("resolved %v truncated=%v, want %v true", ids, got.ResolvedTruncated, want)
+	}
+	if got.Truncated || len(got.NewFindings) != 1 || got.NewFindings[0].ID != "r60" {
+		t.Fatalf("new findings wrong: %+v truncated=%v", got.NewFindings, got.Truncated)
+	}
+	if got.Totals.Resolved != 5 {
+		t.Fatalf("Totals.Resolved = %d, want 5 (uncapped)", got.Totals.Resolved)
+	}
+}
+
+func TestNewFindingsWithoutBaselineTreatsAllAsNew(t *testing.T) {
+	newRes := []*models.ScanResult{sastRes(1, "HIGH"), sastRes(2, "LOW"), sastRes(3, "HIGH")}
+	fake := &fakeResultsServer{t: t, oldID: "unused", newID: "new", newRes: newRes}
+	got, err := scans.NewFindings(context.Background(), newBackend(t, fake.handler()), "", "new", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.NewFindings) != 2 || !got.Truncated || got.Totals.New != 3 || len(got.ResolvedFindings) != 0 || got.OldScanID != "" {
+		t.Fatalf("got %+v", got)
+	}
+	if got.NewFindings[0].ID != "r1" || got.NewFindings[1].ID != "r3" {
+		t.Fatalf("order %s %s", got.NewFindings[0].ID, got.NewFindings[1].ID)
+	}
+}
