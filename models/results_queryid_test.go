@@ -46,3 +46,18 @@ func TestScanResultDataQueryIDInexactOrMissing(t *testing.T) {
 		t.Fatal("non-integer id is not an id")
 	}
 }
+
+func TestScanResultDataUnmarshalNullIsNoop(t *testing.T) {
+	d := ScanResultData{QueryName: "keep", QueryID: json.Number("7")}
+	if err := d.UnmarshalJSON([]byte("null")); err != nil {
+		t.Fatal(err)
+	}
+	if d.QueryName != "keep" || d.QueryID != json.Number("7") {
+		t.Fatalf("null must leave the struct untouched: %+v", d)
+	}
+	var r ScanResult
+	r.ScanResultData.QueryName = "keep"
+	if err := json.Unmarshal([]byte(`{"data":null}`), &r); err != nil || r.ScanResultData.QueryName != "keep" {
+		t.Fatalf("data:null: %+v %v", r.ScanResultData, err)
+	}
+}

@@ -10,17 +10,16 @@ import (
 // UnmarshalJSON decodes ScanResultData with json.Number for its `any`
 // fields (QueryID, RecommendedVersion), so 64-bit SAST query IDs above 2^53
 // are kept exactly. A numeric wire value is therefore a json.Number (it was a
-// float64 before); string values stay strings.
+// float64 before); string values stay strings. Like encoding/json, JSON null
+// is a no-op and an object is decoded into the existing value.
 func (d *ScanResultData) UnmarshalJSON(b []byte) error {
+	if bytes.Equal(bytes.TrimSpace(b), []byte("null")) {
+		return nil
+	}
 	type plain ScanResultData
-	var v plain
 	dec := json.NewDecoder(bytes.NewReader(b))
 	dec.UseNumber()
-	if err := dec.Decode(&v); err != nil {
-		return err
-	}
-	*d = ScanResultData(v)
-	return nil
+	return dec.Decode((*plain)(d))
 }
 
 // QueryIDString returns the query ID as exact decimal digits. ok is false
